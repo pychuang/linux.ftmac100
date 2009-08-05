@@ -1,0 +1,37 @@
+This package includes:
+
+* FTMAC100 driver which supports kernel version >= 2.6.28
+
+Usage:
+
+* put the following code in your platform-dpendent initialization sequence.
+------------------------>8-------------------------->8------------------------
+static struct resource ftmac100_resources[] = {
+	{
+		.start	= MAC_FTMAC100_0_PA_BASE,
+		.end	= MAC_FTMAC100_0_PA_BASE + MAC_FTMAC100_0_PA_SIZE,
+		.flags	= IORESOURCE_MEM,
+	}, {
+		.start	= MAC_FTMAC100_0_IRQ,
+		.end	= MAC_FTMAC100_0_IRQ,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device ftmac100_device = {
+	.name		= "ftmac100",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(ftmac100_resources),
+	.resource	= ftmac100_resources,
+};
+
+platform_device_register(&ftmac100_device);
+------------------------>8-------------------------->8------------------------
+
+* make sure the following config options are set
+
+CONFIG_NETDEVICES=y
+CONFIG_NET_ETHERNET=y
+CONFIG_HAS_DMA=y
+CONFIG_MII=y
+

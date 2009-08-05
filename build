@@ -1,0 +1,8 @@
+#
+if [ -z "$1" ]
+then
+    target=modules
+else
+    target=$1
+fi
+make -C /home/ratbert/linux/FA5A320LINUX26_Kernel M=`pwd` $target
