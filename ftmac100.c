@@ -328,31 +328,31 @@ static int ftmac100_rx_packet_error(struct ftmac100_priv *priv, struct ftmac100_
 {
 	int error = 0;
 
-	if (ftmac100_rxdes_rx_error(rxdes)) {
+	if (unlikely(ftmac100_rxdes_rx_error(rxdes))) {
 		dev_info(&priv->dev->dev, "rx err\n");
 		priv->stats.rx_errors++;
 		error = 1;
 	}
 
-	if (ftmac100_rxdes_crc_error(rxdes)) {
+	if (unlikely(ftmac100_rxdes_crc_error(rxdes))) {
 		dev_info(&priv->dev->dev, "rx crc err\n");
 		priv->stats.rx_crc_errors++;
 		error = 1;
 	}
 
-	if (ftmac100_rxdes_frame_too_long(rxdes)) {
+	if (unlikely(ftmac100_rxdes_frame_too_long(rxdes))) {
 		dev_info(&priv->dev->dev, "rx frame too long\n");
 		priv->stats.rx_length_errors++;
 		error = 1;
 	}
 
-	if (ftmac100_rxdes_runt(rxdes)) {
+	if (unlikely(ftmac100_rxdes_runt(rxdes))) {
 		dev_info(&priv->dev->dev, "rx runt\n");
 		priv->stats.rx_length_errors++;
 		error = 1;
 	}
 
-	if (ftmac100_rxdes_odd_nibble(rxdes)) {
+	if (unlikely(ftmac100_rxdes_odd_nibble(rxdes))) {
 		dev_info(&priv->dev->dev, "rx odd nibble\n");
 		priv->stats.rx_length_errors++;
 		error = 1;
@@ -391,7 +391,7 @@ static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 	if (!rxdes)
 		return 0;
 
-	if (ftmac100_rx_packet_error(priv, rxdes)) {
+	if (unlikely(ftmac100_rx_packet_error(priv, rxdes))) {
 		ftmac100_rx_drop_packet(priv);
 		return 1;
 	}
@@ -406,7 +406,7 @@ static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 		return 1;
 	}
 
-	if (ftmac100_rxdes_multicast(rxdes))
+	if (unlikely(ftmac100_rxdes_multicast(rxdes)))
 		priv->stats.multicast++;
 
 	skb_reserve(skb, NET_IP_ALIGN);
@@ -569,8 +569,8 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 
 	skb = ftmac100_txdes_get_skb(txdes);
 
-	if (ftmac100_txdes_excessive_collision(txdes) ||
-			ftmac100_txdes_late_collision(txdes)) {
+	if (unlikely(ftmac100_txdes_excessive_collision(txdes) ||
+			ftmac100_txdes_late_collision(txdes))) {
 		/*
 		 * packet transmitted to ethernet lost due to late collision
 		 * or excessive collision
@@ -614,6 +614,7 @@ static void ftmac100_tx_complete(struct ftmac100_priv *priv)
 static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 {
 	struct ftmac100_txdes *txdes;
+	unsigned int len = (skb->len < ETH_ZLEN) ? ETH_ZLEN : skb->len;
 	unsigned long flags;
 
 	txdes = ftmac100_current_txdes(priv);
@@ -623,13 +624,13 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 
 	ftmac100_txdes_reset(txdes);
 
-	ftmac100_txdes_set_skb(txdes, skb);	/* we should free skb later */
+	ftmac100_txdes_set_skb(txdes, skb);
 	ftmac100_txdes_set_dma_addr(txdes, skb_shinfo(skb)->dma_maps[0]);
 
 	ftmac100_txdes_set_first_segment(txdes);
 	ftmac100_txdes_set_last_segment(txdes);
 	ftmac100_txdes_set_txint(txdes);
-	ftmac100_txdes_set_buffer_size(txdes, (skb->len < ETH_ZLEN) ? ETH_ZLEN : skb->len);
+	ftmac100_txdes_set_buffer_size(txdes, len);
 
 	spin_lock_irqsave(&priv->tx_pending_lock, flags);
 	priv->tx_pending++;
@@ -1006,7 +1007,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 	}
 
-	if (skb_dma_map(NULL, skb, DMA_TO_DEVICE) != 0) {
+	if (unlikely(skb_dma_map(NULL, skb, DMA_TO_DEVICE) != 0)) {
 		/* drop packet */
 		dev_err(&dev->dev, "map socket buffer failed\n");
 		priv->stats.tx_dropped++;
