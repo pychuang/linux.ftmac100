@@ -41,7 +41,7 @@
 #define DRV_NAME	"ftmac100"
 #define DRV_VERSION	"0.1"
 
-#define RX_QUEUE_ENTRIES	64	/* must be power of 2 */
+#define RX_QUEUE_ENTRIES	128	/* must be power of 2 */
 #define TX_QUEUE_ENTRIES	16	/* must be power of 2 */
 
 #define MAX_PKT_SIZE		1518
