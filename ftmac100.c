@@ -585,6 +585,8 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 
 	dev_kfree_skb_irq(skb);
 
+	ftmac100_txdes_reset(txdes);
+
 	ftmac100_tx_clean_pointer_advance(priv);
 
 	priv->tx_pending--;
@@ -621,8 +623,6 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 	ftmac100_tx_pointer_advance(priv);
 
 	/* setup TX descriptor */
-
-	ftmac100_txdes_reset(txdes);
 
 	ftmac100_txdes_set_skb(txdes, skb);
 	ftmac100_txdes_set_dma_addr(txdes, skb_shinfo(skb)->dma_maps[0]);
