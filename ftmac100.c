@@ -141,8 +141,15 @@ static int ftmac100_reset(struct ftmac100_priv *priv)
 		int maccr;
 
 		maccr = ioread32(priv->base_addr + FTMAC100_OFFSET_MACCR);
-		if (!(maccr & FTMAC100_MACCR_SW_RST))
+		if (!(maccr & FTMAC100_MACCR_SW_RST)) {
+			/*
+			 * FTMAC100_MACCR_SW_RST cleared does not indicate
+			 * that hardware reset completed (what the f*ck).
+			 * We still need to wait for a while.
+			 */
+			msleep_interruptible(1);
 			return 0;
+		}
 
 		msleep_interruptible(10);
 	}
