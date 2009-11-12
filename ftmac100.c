@@ -158,7 +158,7 @@ static int ftmac100_reset(struct ftmac100_priv *priv)
 	return -EIO;
 }
 
-static void ftmac100_set_mac (struct ftmac100_priv *priv, const unsigned char *mac)
+static void ftmac100_set_mac(struct ftmac100_priv *priv, const unsigned char *mac)
 {
 	unsigned int maddr = mac[0] << 8 | mac[1];
 	unsigned int laddr = mac[2] << 24 | mac[3] << 16 | mac[4] << 8 | mac[5];
@@ -611,28 +611,16 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 	ftmac100_tx_clean_pointer_advance(priv);
 
 	priv->tx_pending--;
+	netif_wake_queue(priv->dev);
 
 	return 1;
 }
 
 static void ftmac100_tx_complete(struct ftmac100_priv *priv)
 {
-	int wake = 0;
-
 	spin_lock(&priv->tx_pending_lock);
-
-	if (priv->tx_pending == TX_QUEUE_ENTRIES)
-		wake = 1;
-
 	while (ftmac100_tx_complete_packet(priv));
-
 	spin_unlock(&priv->tx_pending_lock);
-
-	if (wake) {
-		netif_wake_queue(priv->dev);
-		if (printk_ratelimit())
-			dev_dbg(&priv->dev->dev, "restart tx queue\n");
-	}
 }
 
 static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
@@ -646,6 +634,7 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 
 	/* setup TX descriptor */
 
+	spin_lock_irqsave(&priv->tx_pending_lock, flags);
 	ftmac100_txdes_set_skb(txdes, skb);
 	ftmac100_txdes_set_dma_addr(txdes, skb_shinfo(skb)->dma_maps[0]);
 
@@ -654,24 +643,23 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 	ftmac100_txdes_set_txint(txdes);
 	ftmac100_txdes_set_buffer_size(txdes, len);
 
-	spin_lock_irqsave(&priv->tx_pending_lock, flags);
 	priv->tx_pending++;
-	spin_unlock_irqrestore(&priv->tx_pending_lock, flags);
 	if (priv->tx_pending == TX_QUEUE_ENTRIES) {
 		if (printk_ratelimit())
-			dev_dbg(&priv->dev->dev, "tx queue full\n");
+			dev_info(&priv->dev->dev, "tx queue full\n");
 
 		netif_stop_queue(priv->dev);
 	}
 
-	priv->dev->trans_start = jiffies;
 
 	/* start transmit */
 
 	wmb();
 	ftmac100_txdes_set_dma_own(txdes);
-	wmb();
+	spin_unlock_irqrestore(&priv->tx_pending_lock, flags);
+
 	ftmac100_txdma_start_polling(priv);
+	priv->dev->trans_start = jiffies;
 
 	return NETDEV_TX_OK;
 }
@@ -1053,7 +1041,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 static struct net_device_stats *ftmac100_get_stats(struct net_device *dev)
 {
 	struct ftmac100_priv *priv = netdev_priv(dev);
-	return &(priv->stats);
+	return &priv->stats;
 }
 
 /* optional */
