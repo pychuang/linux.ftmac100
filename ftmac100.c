@@ -1074,10 +1074,8 @@ static int ftmac100_remove(struct platform_device *pdev)
 	if (priv->base_addr != NULL)
 		iounmap(priv->base_addr);
 
-	if (priv->res != NULL) {
+	if (priv->res != NULL)
 		release_resource(priv->res);
-		kfree(priv->res);
-	}
 
 	free_netdev(dev);
 
