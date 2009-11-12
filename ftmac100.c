@@ -83,15 +83,15 @@ struct ftmac100_priv
 /******************************************************************************
  * internal functions (hardware register access)
  *****************************************************************************/
-#define INT_MASK_RX_DISABLED	(FTMAC100_INT_NORXBUF		|	\
-				 FTMAC100_INT_XPKT_OK		|	\
+#define INT_MASK_RX_DISABLED	(FTMAC100_INT_XPKT_OK		|	\
 				 FTMAC100_INT_XPKT_LOST		|	\
 				 FTMAC100_INT_RPKT_LOST		|	\
 				 FTMAC100_INT_AHB_ERR		|	\
 				 FTMAC100_INT_PHYSTS_CHG)
 
-#define INT_MASK_ALL_ENABLED	(INT_MASK_RX_DISABLED	|	\
-				 FTMAC100_INT_RPKT_FINISH)
+#define INT_MASK_ALL_ENABLED	(INT_MASK_RX_DISABLED		|	\
+				 FTMAC100_INT_RPKT_FINISH	|	\
+				 FTMAC100_INT_NORXBUF)
 
 #define	INT_MASK_ALL_DISABLED	0
 
