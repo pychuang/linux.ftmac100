@@ -1082,7 +1082,6 @@ static int ftmac100_remove(struct platform_device *pdev)
 	priv = netdev_priv(dev);
 
 	unregister_netdev(dev);
-	ftmac100_free_buffers(priv);
 
 	if (priv->base_addr != NULL)
 		iounmap(priv->base_addr);
