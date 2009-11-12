@@ -129,7 +129,7 @@
 /*
  * PHY write data register
  */
-#define FTMAC100_PHYWDATA_MIIWDATA	0xffff
+#define FTMAC100_PHYWDATA_MIIWDATA(x)	((x) & 0xffff)
 
 /*
  * Transmit descriptor, aligned to 16 bytes

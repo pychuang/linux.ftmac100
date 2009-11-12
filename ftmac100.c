@@ -793,6 +793,8 @@ static void ftmac100_mdio_write(struct net_device *dev, int phy_id, int reg, int
 		FTMAC100_PHYCR_REGAD(reg) |
 		FTMAC100_PHYCR_MIIWR;
 
+	data = FTMAC100_PHYWDATA_MIIWDATA(data);
+
 	iowrite32(data, priv->base_addr + FTMAC100_OFFSET_PHYWDATA);
 	iowrite32(phycr, priv->base_addr + FTMAC100_OFFSET_PHYCR);
 
