@@ -509,7 +509,7 @@ static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 	priv->stats.rx_packets++;
 	priv->stats.rx_bytes += skb->len;
 
-	processed++;
+	(*processed)++;
 
 	return 1;
 }
@@ -998,8 +998,11 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 		retry = ftmac100_rx_packet(priv, &rx);
 	} while (retry && rx < budget);
 
-	netif_rx_complete(priv->dev, napi);
-	ftmac100_enable_all_int(priv);
+	if (!retry || rx < budget) {
+		/* stop polling */
+		netif_rx_complete(priv->dev, napi);
+		ftmac100_enable_all_int(priv);
+	}
 
 	return rx;
 }
