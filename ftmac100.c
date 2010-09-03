@@ -67,8 +67,11 @@ struct ftmac100_priv
 	unsigned int		rx_pointer;
 	unsigned int		tx_clean_pointer;
 	unsigned int		tx_pointer;
-	spinlock_t		tx_pending_lock;
 	unsigned int		tx_pending;
+
+	spinlock_t		hw_lock;
+	spinlock_t		rx_lock;
+	spinlock_t		tx_lock;
 
 	struct net_device	*dev;
 #ifdef USE_NAPI
@@ -98,18 +101,30 @@ struct ftmac100_priv
 #ifdef USE_NAPI
 static inline void ftmac100_disable_rxint(struct ftmac100_priv *priv)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(INT_MASK_RX_DISABLED, priv->base_addr + FTMAC100_OFFSET_IMR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 #endif
 
 static inline void ftmac100_enable_all_int(struct ftmac100_priv *priv)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(INT_MASK_ALL_ENABLED, priv->base_addr + FTMAC100_OFFSET_IMR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 static inline void ftmac100_disable_all_int(struct ftmac100_priv *priv)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(INT_MASK_ALL_DISABLED, priv->base_addr + FTMAC100_OFFSET_IMR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 static inline void ftmac100_set_receive_ring_base(struct ftmac100_priv *priv, 
@@ -131,16 +146,21 @@ static inline void ftmac100_txdma_start_polling(struct ftmac100_priv *priv)
 
 static int ftmac100_reset(struct ftmac100_priv *priv)
 {
+	unsigned long flags;
 	int i;
 
 	/* NOTE: reset clears all registers */
 
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(FTMAC100_MACCR_SW_RST, priv->base_addr + FTMAC100_OFFSET_MACCR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	for (i = 0; i < 5; i++) {
 		int maccr;
 
+		spin_lock_irqsave(&priv->hw_lock, flags);
 		maccr = ioread32(priv->base_addr + FTMAC100_OFFSET_MACCR);
+		spin_unlock_irqrestore(&priv->hw_lock, flags);
 		if (!(maccr & FTMAC100_MACCR_SW_RST)) {
 			/*
 			 * FTMAC100_MACCR_SW_RST cleared does not indicate
@@ -169,6 +189,7 @@ static void ftmac100_set_mac(struct ftmac100_priv *priv, const unsigned char *ma
 
 static int ftmac100_start_hw(struct ftmac100_priv *priv)
 {
+	unsigned long flags;
 	int maccr;
 
 	if (ftmac100_reset(priv))
@@ -176,6 +197,7 @@ static int ftmac100_start_hw(struct ftmac100_priv *priv)
 
 	/* setup ring buffer base registers */
 
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	ftmac100_set_receive_ring_base(priv,
 		priv->descs_dma_addr + offsetof(struct ftmac100_descs, rxdes));
 	ftmac100_set_transmit_ring_base(priv,
@@ -195,13 +217,18 @@ static int ftmac100_start_hw(struct ftmac100_priv *priv)
 		FTMAC100_MACCR_RX_BROADPKT;
 
 	iowrite32(maccr, priv->base_addr + FTMAC100_OFFSET_MACCR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	return 0;
 }
 
 static void ftmac100_stop_hw(struct ftmac100_priv *priv)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(0, priv->base_addr + FTMAC100_OFFSET_MACCR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 /******************************************************************************
@@ -400,30 +427,38 @@ static void ftmac100_rx_drop_packet(struct ftmac100_priv *priv)
 
 static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 {
+	unsigned long flags;
 	struct ftmac100_rxdes *rxdes;
 	struct sk_buff *skb;
 	int length;
 	int copied = 0;
 	int done = 0;
 
+	spin_lock_irqsave(&priv->rx_lock, flags);
 	rxdes = ftmac100_rx_locate_first_segment(priv);
+	spin_unlock_irqrestore(&priv->rx_lock, flags);
 	if (!rxdes)
 		return 0;
 
 	if (unlikely(ftmac100_rx_packet_error(priv, rxdes))) {
+		spin_lock_irqsave(&priv->rx_lock, flags);
 		ftmac100_rx_drop_packet(priv);
+		spin_unlock_irqrestore(&priv->rx_lock, flags);
 		return 1;
 	}
 
 	/* start processing */
 
 	length = ftmac100_rxdes_frame_length(rxdes);
+
 	skb = dev_alloc_skb(length + NET_IP_ALIGN);
 	if (unlikely(!skb)) {
 		if (printk_ratelimit())
 			dev_err(&priv->dev->dev, "rx skb alloc failed\n");
 
+		spin_lock_irqsave(&priv->rx_lock, flags);
 		ftmac100_rx_drop_packet(priv);
+		spin_unlock_irqrestore(&priv->rx_lock, flags);
 		return 1;
 	}
 
@@ -448,10 +483,15 @@ static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 			done = 1;
 
 		dma_sync_single_for_device(NULL, d, RX_BUF_SIZE, DMA_FROM_DEVICE);
+
+		spin_lock_irqsave(&priv->rx_lock, flags);
+
 		ftmac100_rxdes_set_dma_own(rxdes);
 
 		ftmac100_rx_pointer_advance(priv);
 		rxdes = ftmac100_current_rxdes(priv);
+
+		spin_unlock_irqrestore(&priv->rx_lock, flags);
 	} while (!done && copied < length);
 
 	skb->protocol = eth_type_trans(skb, priv->dev);
@@ -618,9 +658,11 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 
 static void ftmac100_tx_complete(struct ftmac100_priv *priv)
 {
-	spin_lock(&priv->tx_pending_lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->tx_lock, flags);
 	while (ftmac100_tx_complete_packet(priv));
-	spin_unlock(&priv->tx_pending_lock);
+	spin_unlock_irqrestore(&priv->tx_lock, flags);
 }
 
 static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
@@ -634,7 +676,7 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 
 	/* setup TX descriptor */
 
-	spin_lock_irqsave(&priv->tx_pending_lock, flags);
+	spin_lock_irqsave(&priv->tx_lock, flags);
 	ftmac100_txdes_set_skb(txdes, skb);
 	ftmac100_txdes_set_dma_addr(txdes, skb_shinfo(skb)->dma_maps[0]);
 
@@ -651,19 +693,19 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 		netif_stop_queue(priv->dev);
 	}
 
-
 	/* start transmit */
 
 	wmb();
 	ftmac100_txdes_set_dma_own(txdes);
-	spin_unlock_irqrestore(&priv->tx_pending_lock, flags);
+	spin_unlock_irqrestore(&priv->tx_lock, flags);
 
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	ftmac100_txdma_start_polling(priv);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 	priv->dev->trans_start = jiffies;
 
 	return NETDEV_TX_OK;
 }
-
 
 /******************************************************************************
  * internal functions (buffer)
@@ -761,6 +803,7 @@ err:
 static int ftmac100_mdio_read(struct net_device *dev, int phy_id, int reg)
 {
 	struct ftmac100_priv *priv = netdev_priv(dev);
+	unsigned long flags;
 	int phycr;
 	int i;
 
@@ -768,7 +811,9 @@ static int ftmac100_mdio_read(struct net_device *dev, int phy_id, int reg)
 		FTMAC100_PHYCR_REGAD(reg) |
 		FTMAC100_PHYCR_MIIRD;
 
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(phycr, priv->base_addr + FTMAC100_OFFSET_PHYCR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	for (i = 0; i < 10; i++) {
 		phycr = ioread32(priv->base_addr + FTMAC100_OFFSET_PHYCR);
@@ -786,6 +831,7 @@ static int ftmac100_mdio_read(struct net_device *dev, int phy_id, int reg)
 static void ftmac100_mdio_write(struct net_device *dev, int phy_id, int reg, int data)
 {
 	struct ftmac100_priv *priv = netdev_priv(dev);
+	unsigned long flags;
 	int phycr;
 	int i;
 
@@ -795,8 +841,10 @@ static void ftmac100_mdio_write(struct net_device *dev, int phy_id, int reg, int
 
 	data = FTMAC100_PHYWDATA_MIIWDATA(data);
 
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(data, priv->base_addr + FTMAC100_OFFSET_PHYWDATA);
 	iowrite32(phycr, priv->base_addr + FTMAC100_OFFSET_PHYCR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	for (i = 0; i < 10; i++) {
 		phycr = ioread32(priv->base_addr + FTMAC100_OFFSET_PHYCR);
@@ -859,9 +907,12 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 {
 	struct net_device *dev = dev_id;
 	struct ftmac100_priv *priv = netdev_priv(dev);
+	unsigned long flags;
 	unsigned int status;
 
+	spin_lock_irqsave(&priv->hw_lock, flags);
 	status = ioread32(priv->base_addr + FTMAC100_OFFSET_ISR);
+	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	if (status & (FTMAC100_INT_RPKT_FINISH | FTMAC100_INT_NORXBUF)) {
 		/*
@@ -978,7 +1029,9 @@ static int ftmac100_open(struct net_device *dev)
 	priv->rx_pointer = 0;
 	priv->tx_clean_pointer = 0;
 	priv->tx_pointer = 0;
-	spin_lock_init(&priv->tx_pending_lock);
+	spin_lock_init(&priv->hw_lock);
+	spin_lock_init(&priv->rx_lock);
+	spin_lock_init(&priv->tx_lock);
 	priv->tx_pending = 0;
 
 #ifdef USE_NAPI
