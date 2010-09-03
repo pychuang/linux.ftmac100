@@ -909,11 +909,14 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 	struct ftmac100_priv *priv = netdev_priv(dev);
 	unsigned long flags;
 	unsigned int status;
+	unsigned int imr;
 
 	spin_lock_irqsave(&priv->hw_lock, flags);
 	status = ioread32(priv->base_addr + FTMAC100_OFFSET_ISR);
+	imr = ioread32(priv->base_addr + FTMAC100_OFFSET_IMR);
 	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
+	status &= imr;
 	if (status & (FTMAC100_INT_RPKT_FINISH | FTMAC100_INT_NORXBUF)) {
 		/*
 		 * FTMAC100_INT_RPKT_FINISH:
