@@ -1028,10 +1028,6 @@ static int ftmac100_open(struct net_device *dev)
 		goto err_irq;
 	}
 
-	err = ftmac100_start_hw(priv);
-	if (err)
-		goto err_hw;
-
 	priv->rx_pointer = 0;
 	priv->tx_clean_pointer = 0;
 	priv->tx_pointer = 0;
@@ -1039,6 +1035,10 @@ static int ftmac100_open(struct net_device *dev)
 	spin_lock_init(&priv->rx_lock);
 	spin_lock_init(&priv->tx_lock);
 	priv->tx_pending = 0;
+
+	err = ftmac100_start_hw(priv);
+	if (err)
+		goto err_hw;
 
 #ifdef USE_NAPI
 	napi_enable(&priv->napi);
