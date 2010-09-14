@@ -929,7 +929,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		/* Disable interrupts for polling */
 		ftmac100_disable_rxint(priv);
 
-		netif_rx_schedule(dev, &priv->napi);
+		netif_rx_schedule(&priv->napi);
 #else
 		int rx = 0;
 
@@ -1000,7 +1000,7 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 
 	if (!retry || rx < budget) {
 		/* stop polling */
-		netif_rx_complete(priv->dev, napi);
+		netif_rx_complete(napi);
 		ftmac100_enable_all_int(priv);
 	}
 
