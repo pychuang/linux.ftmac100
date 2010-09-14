@@ -865,7 +865,7 @@ static void ftmac100_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo 
 {
 	strcpy(info->driver, DRV_NAME);
 	strcpy(info->version, DRV_VERSION);
-	strcpy(info->bus_info, dev->dev.bus_id);
+	strcpy(info->bus_info, dev_name(&dev->dev));
 }
 
 static int ftmac100_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
@@ -929,7 +929,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		/* Disable interrupts for polling */
 		ftmac100_disable_rxint(priv);
 
-		netif_rx_schedule(&priv->napi);
+		napi_schedule(&priv->napi);
 #else
 		int rx = 0;
 
@@ -1000,7 +1000,7 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 
 	if (!retry || rx < budget) {
 		/* stop polling */
-		netif_rx_complete(napi);
+		napi_complete(napi);
 		ftmac100_enable_all_int(priv);
 	}
 
