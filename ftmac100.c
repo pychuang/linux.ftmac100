@@ -1009,7 +1009,7 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 #endif
 
 /******************************************************************************
- * struct net_device functions
+ * struct net_device_ops functions
  *****************************************************************************/
 static int ftmac100_open(struct net_device *dev)
 {
@@ -1114,6 +1114,14 @@ static int ftmac100_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	return generic_mii_ioctl(&priv->mii, data, cmd, NULL);
 }
 
+static struct net_device_ops ftmac100_netdev_ops = {
+	.ndo_open	= ftmac100_open,
+	.ndo_stop	= ftmac100_stop,
+	.ndo_start_xmit	= ftmac100_hard_start_xmit,
+	.ndo_get_stats	= ftmac100_get_stats,
+	.ndo_do_ioctl	= ftmac100_do_ioctl,
+};
+
 /******************************************************************************
  * struct platform_driver functions
  *****************************************************************************/
@@ -1172,12 +1180,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 
 	SET_NETDEV_DEV(dev, &pdev->dev);
 
-	dev->open		= ftmac100_open;
-	dev->stop		= ftmac100_stop;
-	dev->hard_start_xmit	= ftmac100_hard_start_xmit;
-	dev->get_stats		= ftmac100_get_stats;
-	dev->do_ioctl		= ftmac100_do_ioctl;
-
+	dev->netdev_ops		= &ftmac100_netdev_ops;
 	dev->ethtool_ops	= &ftmac100_ethtool_ops;
 
 	platform_set_drvdata(pdev, dev);
