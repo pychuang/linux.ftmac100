@@ -1115,11 +1115,13 @@ static int ftmac100_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 
 static struct net_device_ops ftmac100_netdev_ops = {
-	.ndo_open	= ftmac100_open,
-	.ndo_stop	= ftmac100_stop,
-	.ndo_start_xmit	= ftmac100_hard_start_xmit,
-	.ndo_get_stats	= ftmac100_get_stats,
-	.ndo_do_ioctl	= ftmac100_do_ioctl,
+	.ndo_open		= ftmac100_open,
+	.ndo_stop		= ftmac100_stop,
+	.ndo_start_xmit		= ftmac100_hard_start_xmit,
+	.ndo_set_mac_address	= eth_mac_addr,
+	.ndo_validate_addr	= eth_validate_addr,
+	.ndo_get_stats		= ftmac100_get_stats,
+	.ndo_do_ioctl		= ftmac100_do_ioctl,
 };
 
 /******************************************************************************
