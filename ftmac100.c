@@ -619,6 +619,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 {
 	struct ftmac100_txdes *txdes;
 	struct sk_buff *skb;
+	struct skb_shared_info *sp;
 
 	if (priv->tx_pending == 0)
 		return 0;
@@ -629,6 +630,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 		return 0;
 
 	skb = ftmac100_txdes_get_skb(txdes);
+	sp = skb_shinfo(skb);
 
 	if (unlikely(ftmac100_txdes_excessive_collision(txdes) ||
 			ftmac100_txdes_late_collision(txdes))) {
@@ -642,7 +644,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 		priv->stats.tx_bytes += skb->len;
 	}
 
-	skb_dma_unmap(NULL, skb, DMA_TO_DEVICE);
+	dma_unmap_single(NULL, sp->dma_head, skb_headlen(skb), DMA_TO_DEVICE);
 
 	dev_kfree_skb_irq(skb);
 
@@ -729,9 +731,12 @@ static void ftmac100_free_buffers(struct ftmac100_priv *priv)
 	for (i = 0; i < TX_QUEUE_ENTRIES; i++) {
 		struct ftmac100_txdes *txdes = &priv->descs->txdes[i];
 		struct sk_buff *skb = ftmac100_txdes_get_skb(txdes);
+		struct skb_shared_info *sp;
 
 		if (skb) {
-			skb_dma_unmap(NULL, skb, DMA_TO_DEVICE);
+			sp = skb_shinfo(skb);
+			dma_unmap_single(NULL, sp->dma_head, skb_headlen(skb),
+				DMA_TO_DEVICE);
 			dev_kfree_skb(skb);
 		}
 	}
@@ -765,7 +770,7 @@ static int ftmac100_alloc_buffers(struct ftmac100_priv *priv)
 			goto err;
 
 		d = dma_map_single(NULL, page, PAGE_SIZE, DMA_FROM_DEVICE);
-		if (dma_mapping_error(NULL, d)) {
+		if (unlikely(dma_mapping_error(NULL, d))) {
 			free_page((unsigned long)page);
 			goto err;
 		}
@@ -1076,6 +1081,8 @@ static int ftmac100_stop(struct net_device *dev)
 static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ftmac100_priv *priv = netdev_priv(dev);
+	struct skb_shared_info *sp = skb_shinfo(skb);
+	dma_addr_t map;
 
 	if (unlikely(skb->len > MAX_PKT_SIZE)) {
 		if (printk_ratelimit())
@@ -1086,7 +1093,8 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 	}
 
-	if (unlikely(skb_dma_map(NULL, skb, DMA_TO_DEVICE) != 0)) {
+	map = dma_map_single(NULL, skb->data, skb_headlen(skb), DMA_TO_DEVICE);
+	if (unlikely(dma_mapping_error(NULL, map))) {
 		/* drop packet */
 		if (printk_ratelimit())
 			dev_err(&dev->dev, "map socket buffer failed\n");
@@ -1095,6 +1103,8 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
+
+	sp->dma_head = map;
 
 	return ftmac100_xmit(skb, priv);
 }
