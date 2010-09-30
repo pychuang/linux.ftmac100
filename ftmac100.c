@@ -576,6 +576,11 @@ static inline void ftmac100_txdes_set_dma_addr(struct ftmac100_txdes *txdes, dma
 	txdes->txdes2 = addr;
 }
 
+static inline dma_addr_t ftmac100_txdes_get_dma_addr(struct ftmac100_txdes *txdes)
+{
+	return txdes->txdes2;
+}
+
 /* txdes3 is not used by hardware, we use it to keep track of socket buffer */
 static inline void ftmac100_txdes_set_skb(struct ftmac100_txdes *txdes, struct sk_buff *skb)
 {
@@ -619,7 +624,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 {
 	struct ftmac100_txdes *txdes;
 	struct sk_buff *skb;
-	struct skb_shared_info *sp;
+	dma_addr_t map;
 
 	if (priv->tx_pending == 0)
 		return 0;
@@ -630,7 +635,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 		return 0;
 
 	skb = ftmac100_txdes_get_skb(txdes);
-	sp = skb_shinfo(skb);
+	map = ftmac100_txdes_get_dma_addr(txdes);
 
 	if (unlikely(ftmac100_txdes_excessive_collision(txdes) ||
 			ftmac100_txdes_late_collision(txdes))) {
@@ -644,7 +649,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 		priv->stats.tx_bytes += skb->len;
 	}
 
-	dma_unmap_single(NULL, sp->dma_head, skb_headlen(skb), DMA_TO_DEVICE);
+	dma_unmap_single(NULL, map, skb_headlen(skb), DMA_TO_DEVICE);
 
 	dev_kfree_skb_irq(skb);
 
@@ -667,7 +672,7 @@ static void ftmac100_tx_complete(struct ftmac100_priv *priv)
 	spin_unlock_irqrestore(&priv->tx_lock, flags);
 }
 
-static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
+static int ftmac100_xmit(struct ftmac100_priv *priv, struct sk_buff *skb, dma_addr_t map)
 {
 	struct ftmac100_txdes *txdes;
 	unsigned int len = (skb->len < ETH_ZLEN) ? ETH_ZLEN : skb->len;
@@ -680,7 +685,7 @@ static int ftmac100_xmit(struct sk_buff *skb, struct ftmac100_priv *priv)
 
 	spin_lock_irqsave(&priv->tx_lock, flags);
 	ftmac100_txdes_set_skb(txdes, skb);
-	ftmac100_txdes_set_dma_addr(txdes, skb_shinfo(skb)->dma_head);
+	ftmac100_txdes_set_dma_addr(txdes, map);
 
 	ftmac100_txdes_set_first_segment(txdes);
 	ftmac100_txdes_set_last_segment(txdes);
@@ -731,11 +736,12 @@ static void ftmac100_free_buffers(struct ftmac100_priv *priv)
 	for (i = 0; i < TX_QUEUE_ENTRIES; i++) {
 		struct ftmac100_txdes *txdes = &priv->descs->txdes[i];
 		struct sk_buff *skb = ftmac100_txdes_get_skb(txdes);
-		struct skb_shared_info *sp;
 
 		if (skb) {
-			sp = skb_shinfo(skb);
-			dma_unmap_single(NULL, sp->dma_head, skb_headlen(skb),
+			dma_addr_t map;
+
+			map = ftmac100_txdes_get_dma_addr(txdes);
+			dma_unmap_single(NULL, map, skb_headlen(skb),
 				DMA_TO_DEVICE);
 			dev_kfree_skb(skb);
 		}
@@ -1081,7 +1087,6 @@ static int ftmac100_stop(struct net_device *dev)
 static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ftmac100_priv *priv = netdev_priv(dev);
-	struct skb_shared_info *sp = skb_shinfo(skb);
 	dma_addr_t map;
 
 	if (unlikely(skb->len > MAX_PKT_SIZE)) {
@@ -1104,9 +1109,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 	}
 
-	sp->dma_head = map;
-
-	return ftmac100_xmit(skb, priv);
+	return ftmac100_xmit(priv, skb, map);
 }
 
 static struct net_device_stats *ftmac100_get_stats(struct net_device *dev)
