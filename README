@@ -1,31 +1,33 @@
 This package includes:
 
-* FTMAC100 driver which supports kernel version >= 2.6.28
+* FTMAC100 driver which supports kernel version >= 2.6.32
 
 Usage:
 
 * put the following code in your platform-dpendent initialization sequence.
 ------------------------>8-------------------------->8------------------------
-static struct resource ftmac100_resources[] = {
+static struct resource ftmac100_0_resources[] = {
 	{
-		.start	= MAC_FTMAC100_0_PA_BASE,
-		.end	= MAC_FTMAC100_0_PA_BASE + MAC_FTMAC100_0_PA_SIZE,
+		.start	= A320_FTMAC100_0_PA_BASE,
+		.end	= A320_FTMAC100_0_PA_BASE + SZ_4K - 1,
 		.flags	= IORESOURCE_MEM,
 	}, {
-		.start	= MAC_FTMAC100_0_IRQ,
-		.end	= MAC_FTMAC100_0_IRQ,
+		.start	= IRQ_A320_FTMAC100_0,
 		.flags	= IORESOURCE_IRQ,
 	},
 };
 
-static struct platform_device ftmac100_device = {
+static struct platform_device ftmac100_0_device = {
 	.name		= "ftmac100",
 	.id		= 0,
-	.num_resources	= ARRAY_SIZE(ftmac100_resources),
-	.resource	= ftmac100_resources,
+	.dev		= {
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+	},
+	.num_resources	= ARRAY_SIZE(ftmac100_0_resources),
+	.resource	= ftmac100_0_resources,
 };
 
-platform_device_register(&ftmac100_device);
+platform_device_register(&ftmac100_0_device);
 ------------------------>8-------------------------->8------------------------
 
 * make sure the following config options are set
