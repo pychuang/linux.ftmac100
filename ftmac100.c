@@ -74,6 +74,7 @@ struct ftmac100_priv
 	spinlock_t		tx_lock;
 
 	struct net_device	*netdev;
+	struct device		*dev;
 #ifdef USE_NAPI
 	struct napi_struct	napi;
 #endif
@@ -480,7 +481,8 @@ static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 
 		size = min(length - copied, RX_BUF_SIZE);
 
-		dma_sync_single_for_cpu(NULL, d, RX_BUF_SIZE, DMA_FROM_DEVICE);
+		dma_sync_single_for_cpu(priv->dev, d, RX_BUF_SIZE,
+			DMA_FROM_DEVICE);
 		memcpy(skb_put(skb, size), buf, size);
 
 		copied += size;
@@ -488,7 +490,8 @@ static int ftmac100_rx_packet(struct ftmac100_priv *priv, int *processed)
 		if (ftmac100_rxdes_last_segment(rxdes))
 			done = 1;
 
-		dma_sync_single_for_device(NULL, d, RX_BUF_SIZE, DMA_FROM_DEVICE);
+		dma_sync_single_for_device(priv->dev, d, RX_BUF_SIZE,
+			DMA_FROM_DEVICE);
 
 		spin_lock_irqsave(&priv->rx_lock, flags);
 
@@ -656,7 +659,7 @@ static int ftmac100_tx_complete_packet(struct ftmac100_priv *priv)
 		priv->stats.tx_bytes += skb->len;
 	}
 
-	dma_unmap_single(NULL, map, skb_headlen(skb), DMA_TO_DEVICE);
+	dma_unmap_single(priv->dev, map, skb_headlen(skb), DMA_TO_DEVICE);
 
 	dev_kfree_skb_irq(skb);
 
@@ -736,7 +739,8 @@ static void ftmac100_free_buffers(struct ftmac100_priv *priv)
 		void *page = ftmac100_rxdes_get_va(rxdes);
 
 		if (d)
-			dma_unmap_single(NULL, d, PAGE_SIZE, DMA_FROM_DEVICE);
+			dma_unmap_single(priv->dev, d, PAGE_SIZE,
+				DMA_FROM_DEVICE);
 
 		if (page != NULL)
 			free_page((unsigned long)page);
@@ -750,22 +754,23 @@ static void ftmac100_free_buffers(struct ftmac100_priv *priv)
 			dma_addr_t map;
 
 			map = ftmac100_txdes_get_dma_addr(txdes);
-			dma_unmap_single(NULL, map, skb_headlen(skb),
+			dma_unmap_single(priv->dev, map, skb_headlen(skb),
 				DMA_TO_DEVICE);
 			dev_kfree_skb(skb);
 		}
 	}
 
-	dma_free_coherent(NULL, sizeof(struct ftmac100_descs), priv->descs,
-							priv->descs_dma_addr);
+	dma_free_coherent(priv->dev, sizeof(struct ftmac100_descs),
+		priv->descs, priv->descs_dma_addr);
 }
 
 static int ftmac100_alloc_buffers(struct ftmac100_priv *priv)
 {
 	int i;
 
-	priv->descs = dma_alloc_coherent(NULL, sizeof(struct ftmac100_descs),
-				&priv->descs_dma_addr, GFP_KERNEL | GFP_DMA);
+	priv->descs = dma_alloc_coherent(priv->dev,
+		sizeof(struct ftmac100_descs), &priv->descs_dma_addr,
+		GFP_KERNEL | GFP_DMA);
 	if (priv->descs == NULL)
 		return -ENOMEM;
 
@@ -784,8 +789,9 @@ static int ftmac100_alloc_buffers(struct ftmac100_priv *priv)
 		if (page == NULL)
 			goto err;
 
-		d = dma_map_single(NULL, page, PAGE_SIZE, DMA_FROM_DEVICE);
-		if (unlikely(dma_mapping_error(NULL, d))) {
+		d = dma_map_single(priv->dev, page, PAGE_SIZE,
+			DMA_FROM_DEVICE);
+		if (unlikely(dma_mapping_error(priv->dev, d))) {
 			free_page((unsigned long)page);
 			goto err;
 		}
@@ -1112,8 +1118,9 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *netd
 		return NETDEV_TX_OK;
 	}
 
-	map = dma_map_single(NULL, skb->data, skb_headlen(skb), DMA_TO_DEVICE);
-	if (unlikely(dma_mapping_error(NULL, map))) {
+	map = dma_map_single(priv->dev, skb->data, skb_headlen(skb),
+		DMA_TO_DEVICE);
+	if (unlikely(dma_mapping_error(priv->dev, map))) {
 		/* drop packet */
 		if (printk_ratelimit())
 			dev_err(dev, "map socket buffer failed\n");
@@ -1217,6 +1224,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 
 	priv = netdev_priv(netdev);
 	priv->netdev = netdev;
+	priv->dev = &pdev->dev;
 
 #ifdef USE_NAPI
 	/* initialize NAPI */
