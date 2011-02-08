@@ -73,8 +73,6 @@ struct ftmac100 {
 	struct device *dev;
 	struct napi_struct napi;
 
-	struct net_device_stats stats;
-
 	struct mii_if_info mii;
 };
 
@@ -362,14 +360,15 @@ static struct ftmac100_rxdes *ftmac100_rx_locate_first_segment(
 static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 		struct ftmac100_rxdes *rxdes)
 {
-	struct device *dev = &priv->netdev->dev;
+	struct net_device *netdev = priv->netdev;
+	struct device *dev = &netdev->dev;
 	int error = 0;
 
 	if (unlikely(ftmac100_rxdes_rx_error(rxdes))) {
 		if (printk_ratelimit())
 			dev_info(dev, "rx err\n");
 
-		priv->stats.rx_errors++;
+		netdev->stats.rx_errors++;
 		error = 1;
 	}
 
@@ -377,7 +376,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 		if (printk_ratelimit())
 			dev_info(dev, "rx crc err\n");
 
-		priv->stats.rx_crc_errors++;
+		netdev->stats.rx_crc_errors++;
 		error = 1;
 	}
 
@@ -385,7 +384,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 		if (printk_ratelimit())
 			dev_info(dev, "rx frame too long\n");
 
-		priv->stats.rx_length_errors++;
+		netdev->stats.rx_length_errors++;
 		error = 1;
 	}
 
@@ -393,7 +392,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 		if (printk_ratelimit())
 			dev_info(dev, "rx runt\n");
 
-		priv->stats.rx_length_errors++;
+		netdev->stats.rx_length_errors++;
 		error = 1;
 	}
 
@@ -401,7 +400,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 		if (printk_ratelimit())
 			dev_info(dev, "rx odd nibble\n");
 
-		priv->stats.rx_length_errors++;
+		netdev->stats.rx_length_errors++;
 		error = 1;
 	}
 
@@ -410,7 +409,8 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 
 static void ftmac100_rx_drop_packet(struct ftmac100 *priv)
 {
-	struct device *dev = &priv->netdev->dev;
+	struct net_device *netdev = priv->netdev;
+	struct device *dev = &netdev->dev;
 	struct ftmac100_rxdes *rxdes = ftmac100_current_rxdes(priv);
 	int done = 0;
 
@@ -426,7 +426,7 @@ static void ftmac100_rx_drop_packet(struct ftmac100 *priv)
 		rxdes = ftmac100_current_rxdes(priv);
 	} while (!done && !ftmac100_rxdes_owned_by_dma(rxdes));
 
-	priv->stats.rx_dropped++;
+	netdev->stats.rx_dropped++;
 }
 
 static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
@@ -469,7 +469,7 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	}
 
 	if (unlikely(ftmac100_rxdes_multicast(rxdes)))
-		priv->stats.multicast++;
+		netdev->stats.multicast++;
 
 	skb_reserve(skb, NET_IP_ALIGN);
 
@@ -509,8 +509,8 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 
 	netdev->last_rx = jiffies;
 
-	priv->stats.rx_packets++;
-	priv->stats.rx_bytes += skb->len;
+	netdev->stats.rx_packets++;
+	netdev->stats.rx_bytes += skb->len;
 
 	(*processed)++;
 
@@ -657,10 +657,10 @@ static int ftmac100_tx_complete_packet(struct ftmac100 *priv)
 		 * packet transmitted to ethernet lost due to late collision
 		 * or excessive collision
 		 */
-		priv->stats.tx_aborted_errors++;
+		netdev->stats.tx_aborted_errors++;
 	} else {
-		priv->stats.tx_packets++;
-		priv->stats.tx_bytes += skb->len;
+		netdev->stats.tx_packets++;
+		netdev->stats.tx_bytes += skb->len;
 	}
 
 	dma_unmap_single(priv->dev, map, skb_headlen(skb), DMA_TO_DEVICE);
@@ -978,7 +978,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		if (printk_ratelimit())
 			dev_info(dev, "INT_NORXBUF\n");
 
-		priv->stats.rx_over_errors++;
+		netdev->stats.rx_over_errors++;
 	}
 
 	if (status & (FTMAC100_INT_XPKT_OK | FTMAC100_INT_XPKT_LOST)) {
@@ -998,7 +998,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		if (printk_ratelimit())
 			dev_info(dev, "INT_RPKT_LOST\n");
 
-		priv->stats.rx_fifo_errors++;
+		netdev->stats.rx_fifo_errors++;
 	}
 
 	if (status & FTMAC100_INT_AHB_ERR) {
@@ -1116,7 +1116,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 		if (printk_ratelimit())
 			dev_dbg(dev, "tx packet too big\n");
 
-		priv->stats.tx_dropped++;
+		netdev->stats.tx_dropped++;
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -1128,7 +1128,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 		if (printk_ratelimit())
 			dev_err(dev, "map socket buffer failed\n");
 
-		priv->stats.tx_dropped++;
+		netdev->stats.tx_dropped++;
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -1138,8 +1138,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 
 static struct net_device_stats *ftmac100_get_stats(struct net_device *netdev)
 {
-	struct ftmac100 *priv = netdev_priv(netdev);
-	return &priv->stats;
+	return &netdev->stats;
 }
 
 /* optional */
