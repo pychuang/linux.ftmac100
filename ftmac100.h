@@ -1,7 +1,7 @@
 /*
- * Faraday FTMAC100 Ethernet
+ * Faraday FTMAC100 10/100 Ethernet
  *
- * (C) Copyright 2009 Faraday Technology
+ * (C) Copyright 2009-2011 Faraday Technology
  * Po-Yu Chuang <ratbert@faraday-tech.com>
  *
  * This program is free software; you can redistribute it and/or modify
