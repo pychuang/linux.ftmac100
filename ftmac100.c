@@ -35,8 +35,6 @@
 
 #include "ftmac100.h"
 
-#define USE_NAPI
-
 #define DRV_NAME	"ftmac100"
 #define DRV_VERSION	"0.1"
 
@@ -73,9 +71,7 @@ struct ftmac100 {
 
 	struct net_device *netdev;
 	struct device *dev;
-#ifdef USE_NAPI
 	struct napi_struct napi;
-#endif
 
 	struct net_device_stats stats;
 
@@ -97,7 +93,6 @@ struct ftmac100 {
 
 #define INT_MASK_ALL_DISABLED	0
 
-#ifdef USE_NAPI
 static inline void ftmac100_disable_rxint(struct ftmac100 *priv)
 {
 	unsigned long flags;
@@ -106,7 +101,6 @@ static inline void ftmac100_disable_rxint(struct ftmac100 *priv)
 	iowrite32(INT_MASK_RX_DISABLED, priv->base + FTMAC100_OFFSET_IMR);
 	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
-#endif
 
 static inline void ftmac100_enable_all_int(struct ftmac100 *priv)
 {
@@ -511,12 +505,7 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	skb->protocol = eth_type_trans(skb, netdev);
 
 	/* push packet to protocol stack */
-
-#ifdef USE_NAPI
 	netif_receive_skb(skb);
-#else
-	netif_rx(skb);
-#endif
 
 	netdev->last_rx = jiffies;
 
@@ -977,17 +966,11 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		 * FTMAC100_INT_NORXBUF:
 		 *	RX buffer unavailable
 		 */
-#ifdef USE_NAPI
+
 		/* Disable interrupts for polling */
 		ftmac100_disable_rxint(priv);
 
 		napi_schedule(&priv->napi);
-#else
-		int rx = 0;
-
-		while (ftmac100_rx_packet(priv, &rx))
-			;
-#endif
 	}
 
 	if (status & FTMAC100_INT_NORXBUF) {
@@ -1040,7 +1023,6 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 /******************************************************************************
  * struct napi_struct functions
  *****************************************************************************/
-#ifdef USE_NAPI
 static int ftmac100_poll(struct napi_struct *napi, int budget)
 {
 	struct ftmac100 *priv = container_of(napi, struct ftmac100, napi);
@@ -1059,7 +1041,6 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 
 	return rx;
 }
-#endif
 
 /******************************************************************************
  * struct net_device_ops functions
@@ -1095,9 +1076,7 @@ static int ftmac100_open(struct net_device *netdev)
 	if (err)
 		goto err_hw;
 
-#ifdef USE_NAPI
 	napi_enable(&priv->napi);
-#endif
 	netif_start_queue(netdev);
 
 	ftmac100_enable_all_int(priv);
@@ -1118,9 +1097,7 @@ static int ftmac100_stop(struct net_device *netdev)
 
 	ftmac100_disable_all_int(priv);
 	netif_stop_queue(netdev);
-#ifdef USE_NAPI
 	napi_disable(&priv->napi);
-#endif
 	ftmac100_stop_hw(priv);
 	free_irq(priv->irq, netdev);
 	ftmac100_free_buffers(priv);
@@ -1208,7 +1185,6 @@ static int ftmac100_probe(struct platform_device *pdev)
 		return irq;
 
 	/* setup net_device */
-
 	netdev = alloc_etherdev(sizeof(*priv));
 	if (!netdev) {
 		err = -ENOMEM;
@@ -1222,18 +1198,14 @@ static int ftmac100_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, netdev);
 
 	/* setup private data */
-
 	priv = netdev_priv(netdev);
 	priv->netdev = netdev;
 	priv->dev = &pdev->dev;
 
-#ifdef USE_NAPI
 	/* initialize NAPI */
 	netif_napi_add(netdev, &priv->napi, ftmac100_poll, 64);
-#endif
 
 	/* map io memory */
-
 	priv->res = request_mem_region(res->start, res->end - res->start,
 			dev_name(&pdev->dev));
 	if (!priv->res) {
@@ -1252,7 +1224,6 @@ static int ftmac100_probe(struct platform_device *pdev)
 	priv->irq = irq;
 
 	/* initialize struct mii_if_info */
-
 	priv->mii.phy_id	= 0;
 	priv->mii.phy_id_mask	= 0x1f;
 	priv->mii.reg_num_mask	= 0x1f;
@@ -1261,7 +1232,6 @@ static int ftmac100_probe(struct platform_device *pdev)
 	priv->mii.mdio_write	= ftmac100_mdio_write;
 
 	/* register network device */
-
 	err = register_netdev(netdev);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to register netdev\n");
