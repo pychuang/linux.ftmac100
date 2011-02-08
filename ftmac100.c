@@ -507,8 +507,6 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	/* push packet to protocol stack */
 	netif_receive_skb(skb);
 
-	netdev->last_rx = jiffies;
-
 	netdev->stats.rx_packets++;
 	netdev->stats.rx_bytes += skb->len;
 
@@ -727,7 +725,6 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 	spin_lock_irqsave(&priv->hw_lock, flags);
 	ftmac100_txdma_start_polling(priv);
 	spin_unlock_irqrestore(&priv->hw_lock, flags);
-	netdev->trans_start = jiffies;
 
 	return NETDEV_TX_OK;
 }
