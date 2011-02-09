@@ -95,14 +95,12 @@ static void ftmac100_disable_all_int(struct ftmac100 *priv)
 	iowrite32(INT_MASK_ALL_DISABLED, priv->base + FTMAC100_OFFSET_IMR);
 }
 
-static void ftmac100_set_receive_ring_base(struct ftmac100 *priv,
-		dma_addr_t addr)
+static void ftmac100_set_rx_ring_base(struct ftmac100 *priv, dma_addr_t addr)
 {
 	iowrite32(addr, priv->base + FTMAC100_OFFSET_RXR_BADR);
 }
 
-static void ftmac100_set_transmit_ring_base(struct ftmac100 *priv,
-		dma_addr_t addr)
+static void ftmac100_set_tx_ring_base(struct ftmac100 *priv, dma_addr_t addr)
 {
 	iowrite32(addr, priv->base + FTMAC100_OFFSET_TXR_BADR);
 }
@@ -167,13 +165,14 @@ static int ftmac100_start_hw(struct ftmac100 *priv)
 		return -EIO;
 
 	/* setup ring buffer base registers */
-	ftmac100_set_receive_ring_base(priv,
-		priv->descs_dma_addr + offsetof(struct ftmac100_descs, rxdes));
-	ftmac100_set_transmit_ring_base(priv,
-		priv->descs_dma_addr + offsetof(struct ftmac100_descs, txdes));
+	ftmac100_set_rx_ring_base(priv,
+				  priv->descs_dma_addr +
+				  offsetof(struct ftmac100_descs, rxdes));
+	ftmac100_set_tx_ring_base(priv,
+				  priv->descs_dma_addr +
+				  offsetof(struct ftmac100_descs, txdes));
 
-	iowrite32(FTMAC100_APTC_RXPOLL_CNT(1),
-		priv->base + FTMAC100_OFFSET_APTC);
+	iowrite32(FTMAC100_APTC_RXPOLL_CNT(1), priv->base + FTMAC100_OFFSET_APTC);
 
 	ftmac100_set_mac(priv, netdev->dev_addr);
 
@@ -246,7 +245,7 @@ static bool ftmac100_rxdes_multicast(struct ftmac100_rxdes *rxdes)
 }
 
 static void ftmac100_rxdes_set_buffer_size(struct ftmac100_rxdes *rxdes,
-		unsigned int size)
+					   unsigned int size)
 {
 	rxdes->rxdes1 &= cpu_to_le32(FTMAC100_RXDES1_EDORR);
 	rxdes->rxdes1 |= cpu_to_le32(FTMAC100_RXDES1_RXBUF_SIZE(size));
@@ -258,7 +257,7 @@ static void ftmac100_rxdes_set_end_of_ring(struct ftmac100_rxdes *rxdes)
 }
 
 static void ftmac100_rxdes_set_dma_addr(struct ftmac100_rxdes *rxdes,
-		dma_addr_t addr)
+					dma_addr_t addr)
 {
 	rxdes->rxdes2 = cpu_to_le32(addr);
 }
@@ -300,8 +299,8 @@ static struct ftmac100_rxdes *ftmac100_current_rxdes(struct ftmac100 *priv)
 	return &priv->descs->rxdes[priv->rx_pointer];
 }
 
-static struct ftmac100_rxdes *ftmac100_rx_locate_first_segment(
-		struct ftmac100 *priv)
+static struct ftmac100_rxdes *
+ftmac100_rx_locate_first_segment(struct ftmac100 *priv)
 {
 	struct ftmac100_rxdes *rxdes = ftmac100_current_rxdes(priv);
 
@@ -318,7 +317,7 @@ static struct ftmac100_rxdes *ftmac100_rx_locate_first_segment(
 }
 
 static bool ftmac100_rx_packet_error(struct ftmac100 *priv,
-		struct ftmac100_rxdes *rxdes)
+				     struct ftmac100_rxdes *rxdes)
 {
 	struct net_device *netdev = priv->netdev;
 	bool error = false;
@@ -425,7 +424,7 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 		size = min(length - copied, RX_BUF_SIZE);
 
 		dma_sync_single_for_cpu(priv->dev, map, RX_BUF_SIZE,
-			DMA_FROM_DEVICE);
+					DMA_FROM_DEVICE);
 		memcpy(skb_put(skb, size), buf, size);
 
 		copied += size;
@@ -434,7 +433,7 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 			done = true;
 
 		dma_sync_single_for_device(priv->dev, map, RX_BUF_SIZE,
-			DMA_FROM_DEVICE);
+					   DMA_FROM_DEVICE);
 
 		ftmac100_rxdes_set_dma_own(rxdes);
 
@@ -513,13 +512,13 @@ static void ftmac100_txdes_set_txint(struct ftmac100_txdes *txdes)
 }
 
 static void ftmac100_txdes_set_buffer_size(struct ftmac100_txdes *txdes,
-		unsigned int len)
+					   unsigned int len)
 {
 	txdes->txdes1 |= cpu_to_le32(FTMAC100_TXDES1_TXBUF_SIZE(len));
 }
 
 static void ftmac100_txdes_set_dma_addr(struct ftmac100_txdes *txdes,
-		dma_addr_t addr)
+					dma_addr_t addr)
 {
 	txdes->txdes2 = cpu_to_le32(addr);
 }
@@ -533,8 +532,7 @@ static dma_addr_t ftmac100_txdes_get_dma_addr(struct ftmac100_txdes *txdes)
  * txdes3 is not used by hardware. We use it to keep track of socket buffer.
  * Since hardware does not touch it, we can skip cpu_to_le32()/le32_to_cpu().
  */
-static void ftmac100_txdes_set_skb(struct ftmac100_txdes *txdes,
-		struct sk_buff *skb)
+static void ftmac100_txdes_set_skb(struct ftmac100_txdes *txdes, struct sk_buff *skb)
 {
 	txdes->txdes3 = (unsigned int)skb;
 }
@@ -559,8 +557,7 @@ static void ftmac100_tx_pointer_advance(struct ftmac100 *priv)
 
 static void ftmac100_tx_clean_pointer_advance(struct ftmac100 *priv)
 {
-	priv->tx_clean_pointer =
-		ftmac100_next_tx_pointer(priv->tx_clean_pointer);
+	priv->tx_clean_pointer = ftmac100_next_tx_pointer(priv->tx_clean_pointer);
 }
 
 static struct ftmac100_txdes *ftmac100_current_txdes(struct ftmac100 *priv)
@@ -568,8 +565,7 @@ static struct ftmac100_txdes *ftmac100_current_txdes(struct ftmac100 *priv)
 	return &priv->descs->txdes[priv->tx_pointer];
 }
 
-static struct ftmac100_txdes *ftmac100_current_clean_txdes(
-		struct ftmac100 *priv)
+static struct ftmac100_txdes *ftmac100_current_clean_txdes(struct ftmac100 *priv)
 {
 	return &priv->descs->txdes[priv->tx_clean_pointer];
 }
@@ -593,7 +589,7 @@ static bool ftmac100_tx_complete_packet(struct ftmac100 *priv)
 	map = ftmac100_txdes_get_dma_addr(txdes);
 
 	if (unlikely(ftmac100_txdes_excessive_collision(txdes) ||
-			ftmac100_txdes_late_collision(txdes))) {
+		     ftmac100_txdes_late_collision(txdes))) {
 		/*
 		 * packet transmitted to ethernet lost due to late collision
 		 * or excessive collision
@@ -629,7 +625,7 @@ static void ftmac100_tx_complete(struct ftmac100 *priv)
 }
 
 static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
-		dma_addr_t map)
+			 dma_addr_t map)
 {
 	struct net_device *netdev = priv->netdev;
 	struct ftmac100_txdes *txdes;
@@ -680,7 +676,7 @@ static void ftmac100_free_buffers(struct ftmac100 *priv)
 
 		if (map)
 			dma_unmap_single(priv->dev, map, PAGE_SIZE,
-				DMA_FROM_DEVICE);
+					 DMA_FROM_DEVICE);
 
 		if (page)
 			free_page((unsigned long)page);
@@ -695,31 +691,28 @@ static void ftmac100_free_buffers(struct ftmac100 *priv)
 
 			map = ftmac100_txdes_get_dma_addr(txdes);
 			dma_unmap_single(priv->dev, map, skb_headlen(skb),
-				DMA_TO_DEVICE);
+					 DMA_TO_DEVICE);
 			dev_kfree_skb(skb);
 		}
 	}
 
 	dma_free_coherent(priv->dev, sizeof(struct ftmac100_descs),
-		priv->descs, priv->descs_dma_addr);
+			  priv->descs, priv->descs_dma_addr);
 }
 
 static int ftmac100_alloc_buffers(struct ftmac100 *priv)
 {
 	int i;
 
-	priv->descs = dma_alloc_coherent(priv->dev,
-		sizeof(struct ftmac100_descs), &priv->descs_dma_addr,
-		GFP_KERNEL | GFP_DMA);
+	priv->descs = dma_alloc_coherent(priv->dev, sizeof(struct ftmac100_descs),
+					 &priv->descs_dma_addr, GFP_KERNEL | GFP_DMA);
 	if (!priv->descs)
 		return -ENOMEM;
 
 	memset(priv->descs, 0, sizeof(struct ftmac100_descs));
 
 	/* initialize RX ring */
-
-	ftmac100_rxdes_set_end_of_ring(
-		&priv->descs->rxdes[RX_QUEUE_ENTRIES - 1]);
+	ftmac100_rxdes_set_end_of_ring(&priv->descs->rxdes[RX_QUEUE_ENTRIES - 1]);
 
 	for (i = 0; i < RX_QUEUE_ENTRIES; i += 2) {
 		struct ftmac100_rxdes *rxdes = &priv->descs->rxdes[i];
@@ -730,8 +723,7 @@ static int ftmac100_alloc_buffers(struct ftmac100 *priv)
 		if (!page)
 			goto err;
 
-		map = dma_map_single(priv->dev, page, PAGE_SIZE,
-			DMA_FROM_DEVICE);
+		map = dma_map_single(priv->dev, page, PAGE_SIZE, DMA_FROM_DEVICE);
 		if (unlikely(dma_mapping_error(priv->dev, map))) {
 			free_page((unsigned long)page);
 			goto err;
@@ -756,8 +748,7 @@ static int ftmac100_alloc_buffers(struct ftmac100 *priv)
 
 	/* initialize TX ring */
 
-	ftmac100_txdes_set_end_of_ring(
-		&priv->descs->txdes[TX_QUEUE_ENTRIES - 1]);
+	ftmac100_txdes_set_end_of_ring(&priv->descs->txdes[TX_QUEUE_ENTRIES - 1]);
 	return 0;
 
 err:
@@ -779,6 +770,7 @@ static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 		FTMAC100_PHYCR_MIIRD;
 
 	iowrite32(phycr, priv->base + FTMAC100_OFFSET_PHYCR);
+
 	for (i = 0; i < 10; i++) {
 		phycr = ioread32(priv->base + FTMAC100_OFFSET_PHYCR);
 
@@ -792,8 +784,8 @@ static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 	return 0;
 }
 
-static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
-		int reg, int data)
+static void ftmac100_mdio_write(struct net_device *netdev, int phy_id, int reg,
+				int data)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	unsigned int phycr;
@@ -824,22 +816,20 @@ static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
  * struct ethtool_ops functions
  *****************************************************************************/
 static void ftmac100_get_drvinfo(struct net_device *netdev,
-		struct ethtool_drvinfo *info)
+				 struct ethtool_drvinfo *info)
 {
 	strcpy(info->driver, DRV_NAME);
 	strcpy(info->version, DRV_VERSION);
 	strcpy(info->bus_info, dev_name(&netdev->dev));
 }
 
-static int ftmac100_get_settings(struct net_device *netdev,
-		struct ethtool_cmd *cmd)
+static int ftmac100_get_settings(struct net_device *netdev, struct ethtool_cmd *cmd)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	return mii_ethtool_gset(&priv->mii, cmd);
 }
 
-static int ftmac100_set_settings(struct net_device *netdev,
-		struct ethtool_cmd *cmd)
+static int ftmac100_set_settings(struct net_device *netdev, struct ethtool_cmd *cmd)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	return mii_ethtool_sset(&priv->mii, cmd);
@@ -980,8 +970,7 @@ static int ftmac100_open(struct net_device *netdev)
 		goto err_alloc;
 	}
 
-	err = request_irq(priv->irq, ftmac100_interrupt, IRQF_SHARED,
-		netdev->name, netdev);
+	err = request_irq(priv->irq, ftmac100_interrupt, 0, netdev->name, netdev);
 	if (err) {
 		netdev_err(netdev, "failed to request irq %d\n", priv->irq);
 		goto err_irq;
@@ -1025,8 +1014,7 @@ static int ftmac100_stop(struct net_device *netdev)
 	return 0;
 }
 
-static int ftmac100_hard_start_xmit(struct sk_buff *skb,
-		struct net_device *netdev)
+static int ftmac100_hard_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	dma_addr_t map;
@@ -1040,8 +1028,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 		return NETDEV_TX_OK;
 	}
 
-	map = dma_map_single(priv->dev, skb->data, skb_headlen(skb),
-		DMA_TO_DEVICE);
+	map = dma_map_single(priv->dev, skb->data, skb_headlen(skb), DMA_TO_DEVICE);
 	if (unlikely(dma_mapping_error(priv->dev, map))) {
 		/* drop packet */
 		if (net_ratelimit())
@@ -1056,8 +1043,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 }
 
 /* optional */
-static int ftmac100_do_ioctl(struct net_device *netdev, struct ifreq *ifr,
-		int cmd)
+static int ftmac100_do_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	struct mii_ioctl_data *data = if_mii(ifr);
@@ -1121,7 +1107,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 
 	/* map io memory */
 	priv->res = request_mem_region(res->start, res->end - res->start,
-			dev_name(&pdev->dev));
+				       dev_name(&pdev->dev));
 	if (!priv->res) {
 		dev_err(&pdev->dev, "Could not reserve memory region\n");
 		err = -ENOMEM;
@@ -1157,7 +1143,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 	if (!is_valid_ether_addr(netdev->dev_addr)) {
 		random_ether_addr(netdev->dev_addr);
 		netdev_info(netdev, "generated random MAC address %pM\n",
-			netdev->dev_addr);
+			    netdev->dev_addr);
 	}
 
 	return 0;
