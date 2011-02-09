@@ -615,12 +615,10 @@ static bool ftmac100_tx_complete_packet(struct ftmac100 *priv)
 
 static void ftmac100_tx_complete(struct ftmac100 *priv)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&priv->tx_lock, flags);
+	spin_lock(&priv->tx_lock);
 	while (ftmac100_tx_complete_packet(priv))
 		;
-	spin_unlock_irqrestore(&priv->tx_lock, flags);
+	spin_unlock(&priv->tx_lock);
 }
 
 static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
@@ -629,14 +627,12 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 	struct net_device *netdev = priv->netdev;
 	struct ftmac100_txdes *txdes;
 	unsigned int len = (skb->len < ETH_ZLEN) ? ETH_ZLEN : skb->len;
-	unsigned long flags;
 
 	txdes = ftmac100_current_txdes(priv);
 	ftmac100_tx_pointer_advance(priv);
 
 	/* setup TX descriptor */
-
-	spin_lock_irqsave(&priv->tx_lock, flags);
+	spin_lock(&priv->tx_lock);
 	ftmac100_txdes_set_skb(txdes, skb);
 	ftmac100_txdes_set_dma_addr(txdes, map);
 
@@ -655,7 +651,7 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 
 	/* start transmit */
 	ftmac100_txdes_set_dma_own(txdes);
-	spin_unlock_irqrestore(&priv->tx_lock, flags);
+	spin_unlock(&priv->tx_lock);
 
 	ftmac100_txdma_start_polling(priv);
 	return NETDEV_TX_OK;
