@@ -19,19 +19,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <linux/delay.h>
 #include <linux/dma-mapping.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/kernel.h>
 #include <linux/mii.h>
 #include <linux/module.h>
-#include <linux/moduleparam.h>
 #include <linux/netdevice.h>
 #include <linux/platform_device.h>
-#include <linux/version.h>
 
 #include "ftmac100.h"
 
