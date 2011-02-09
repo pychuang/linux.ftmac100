@@ -150,10 +150,18 @@ static void ftmac100_set_mac(struct ftmac100 *priv, const unsigned char *mac)
 	iowrite32(laddr, priv->base + FTMAC100_OFFSET_MAC_LADR);
 }
 
+#define MACCR_ENABLE_ALL	(FTMAC100_MACCR_XMT_EN	| \
+				 FTMAC100_MACCR_RCV_EN	| \
+				 FTMAC100_MACCR_XDMA_EN	| \
+				 FTMAC100_MACCR_RDMA_EN	| \
+				 FTMAC100_MACCR_CRC_APD	| \
+				 FTMAC100_MACCR_FULLDUP	| \
+				 FTMAC100_MACCR_RX_RUNT	| \
+				 FTMAC100_MACCR_RX_BROADPKT)
+
 static int ftmac100_start_hw(struct ftmac100 *priv)
 {
 	struct net_device *netdev = priv->netdev;
-	int maccr;
 
 	if (ftmac100_reset(priv))
 		return -EIO;
@@ -169,16 +177,7 @@ static int ftmac100_start_hw(struct ftmac100 *priv)
 
 	ftmac100_set_mac(priv, netdev->dev_addr);
 
-	maccr = FTMAC100_MACCR_XMT_EN |
-		FTMAC100_MACCR_RCV_EN |
-		FTMAC100_MACCR_XDMA_EN |
-		FTMAC100_MACCR_RDMA_EN |
-		FTMAC100_MACCR_CRC_APD |
-		FTMAC100_MACCR_FULLDUP |
-		FTMAC100_MACCR_RX_RUNT |
-		FTMAC100_MACCR_RX_BROADPKT;
-
-	iowrite32(maccr, priv->base + FTMAC100_OFFSET_MACCR);
+	iowrite32(MACCR_ENABLE_ALL, priv->base + FTMAC100_OFFSET_MACCR);
 	return 0;
 }
 
