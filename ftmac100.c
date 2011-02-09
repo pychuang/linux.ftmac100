@@ -443,14 +443,13 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 
 	skb->protocol = eth_type_trans(skb, netdev);
 
-	/* push packet to protocol stack */
-	netif_receive_skb(skb);
-
 	netdev->stats.rx_packets++;
 	netdev->stats.rx_bytes += skb->len;
 
-	(*processed)++;
+	/* push packet to protocol stack */
+	netif_receive_skb(skb);
 
+	(*processed)++;
 	return true;
 }
 
