@@ -36,7 +36,7 @@
 #include "ftmac100.h"
 
 #define DRV_NAME	"ftmac100"
-#define DRV_VERSION	"0.1"
+#define DRV_VERSION	"0.2"
 
 #define RX_QUEUE_ENTRIES	128	/* must be power of 2 */
 #define TX_QUEUE_ENTRIES	16	/* must be power of 2 */
@@ -77,22 +77,15 @@ struct ftmac100 {
 /******************************************************************************
  * internal functions (hardware register access)
  *****************************************************************************/
-#define INT_MASK_RX_DISABLED	(FTMAC100_INT_XPKT_OK		|	\
-				 FTMAC100_INT_XPKT_LOST		|	\
-				 FTMAC100_INT_RPKT_LOST		|	\
-				 FTMAC100_INT_AHB_ERR		|	\
+#define INT_MASK_ALL_ENABLED	(FTMAC100_INT_RPKT_FINISH	| \
+				 FTMAC100_INT_NORXBUF		| \
+				 FTMAC100_INT_XPKT_OK		| \
+				 FTMAC100_INT_XPKT_LOST		| \
+				 FTMAC100_INT_RPKT_LOST		| \
+				 FTMAC100_INT_AHB_ERR		| \
 				 FTMAC100_INT_PHYSTS_CHG)
 
-#define INT_MASK_ALL_ENABLED	(INT_MASK_RX_DISABLED		|	\
-				 FTMAC100_INT_RPKT_FINISH	|	\
-				 FTMAC100_INT_NORXBUF)
-
 #define INT_MASK_ALL_DISABLED	0
-
-static void ftmac100_disable_rxint(struct ftmac100 *priv)
-{
-	iowrite32(INT_MASK_RX_DISABLED, priv->base + FTMAC100_OFFSET_IMR);
-}
 
 static void ftmac100_enable_all_int(struct ftmac100 *priv)
 {
@@ -880,13 +873,29 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 {
 	struct net_device *netdev = dev_id;
 	struct ftmac100 *priv = netdev_priv(netdev);
+
+	if (likely(netif_running(netdev))) {
+		/* Disable interrupts for polling */
+		ftmac100_disable_all_int(priv);
+		napi_schedule(&priv->napi);
+	}
+
+	return IRQ_HANDLED;
+}
+
+/******************************************************************************
+ * struct napi_struct functions
+ *****************************************************************************/
+static int ftmac100_poll(struct napi_struct *napi, int budget)
+{
+	struct ftmac100 *priv = container_of(napi, struct ftmac100, napi);
+	struct net_device *netdev = priv->netdev;
 	unsigned int status;
-	unsigned int imr;
+	int completed = 1;
+	int rx = 0;
 
 	status = ioread32(priv->base + FTMAC100_OFFSET_ISR);
-	imr = ioread32(priv->base + FTMAC100_OFFSET_IMR);
 
-	status &= imr;
 	if (status & (FTMAC100_INT_RPKT_FINISH | FTMAC100_INT_NORXBUF)) {
 		/*
 		 * FTMAC100_INT_RPKT_FINISH:
@@ -895,11 +904,14 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		 * FTMAC100_INT_NORXBUF:
 		 *	RX buffer unavailable
 		 */
+		int retry;
 
-		/* Disable interrupts for polling */
-		ftmac100_disable_rxint(priv);
+		do {
+			retry = ftmac100_rx_packet(priv, &rx);
+		} while (retry && rx < budget);
 
-		napi_schedule(&priv->napi);
+		if (retry && rx == budget)
+			completed = 0;
 	}
 
 	if (status & FTMAC100_INT_NORXBUF) {
@@ -946,23 +958,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 		mii_check_link(&priv->mii);
 	}
 
-	return IRQ_HANDLED;
-}
-
-/******************************************************************************
- * struct napi_struct functions
- *****************************************************************************/
-static int ftmac100_poll(struct napi_struct *napi, int budget)
-{
-	struct ftmac100 *priv = container_of(napi, struct ftmac100, napi);
-	int retry;
-	int rx = 0;
-
-	do {
-		retry = ftmac100_rx_packet(priv, &rx);
-	} while (retry && rx < budget);
-
-	if (!retry || rx < budget) {
+	if (completed) {
 		/* stop polling */
 		napi_complete(napi);
 		ftmac100_enable_all_int(priv);
