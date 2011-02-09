@@ -1165,7 +1165,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 
 	netdev_info(netdev, "irq %d, mapped at %p\n", priv->irq, priv->base);
 
-	if (is_zero_ether_addr(netdev->dev_addr)) {
+	if (!is_valid_ether_addr(netdev->dev_addr)) {
 		random_ether_addr(netdev->dev_addr);
 		netdev_info(netdev, "generated random MAC address "
 			"%.2x:%.2x:%.2x:%.2x:%.2x:%.2x.\n",
