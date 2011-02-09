@@ -121,7 +121,7 @@ static int ftmac100_reset(struct ftmac100 *priv)
 	iowrite32(FTMAC100_MACCR_SW_RST, priv->base + FTMAC100_OFFSET_MACCR);
 
 	for (i = 0; i < 5; i++) {
-		int maccr;
+		unsigned int maccr;
 
 		maccr = ioread32(priv->base + FTMAC100_OFFSET_MACCR);
 		if (!(maccr & FTMAC100_MACCR_SW_RST)) {
@@ -765,7 +765,7 @@ err:
 static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
-	int phycr;
+	unsigned int phycr;
 	int i;
 
 	phycr = FTMAC100_PHYCR_PHYAD(phy_id) |
@@ -790,7 +790,7 @@ static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
 		int reg, int data)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
-	int phycr;
+	unsigned int phycr;
 	int i;
 
 	phycr = FTMAC100_PHYCR_PHYAD(phy_id) |
