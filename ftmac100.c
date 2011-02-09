@@ -1064,9 +1064,6 @@ static int ftmac100_open(struct net_device *netdev)
 	priv->rx_pointer = 0;
 	priv->tx_clean_pointer = 0;
 	priv->tx_pointer = 0;
-	spin_lock_init(&priv->hw_lock);
-	spin_lock_init(&priv->rx_lock);
-	spin_lock_init(&priv->tx_lock);
 	priv->tx_pending = 0;
 
 	err = ftmac100_start_hw(priv);
@@ -1197,6 +1194,10 @@ static int ftmac100_probe(struct platform_device *pdev)
 	priv = netdev_priv(netdev);
 	priv->netdev = netdev;
 	priv->dev = &pdev->dev;
+
+	spin_lock_init(&priv->hw_lock);
+	spin_lock_init(&priv->rx_lock);
+	spin_lock_init(&priv->tx_lock);
 
 	/* initialize NAPI */
 	netif_napi_add(netdev, &priv->napi, ftmac100_poll, 64);
