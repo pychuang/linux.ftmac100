@@ -123,7 +123,7 @@ static inline void ftmac100_txdma_start_polling(struct ftmac100 *priv)
 
 static int ftmac100_reset(struct ftmac100 *priv)
 {
-	struct device *dev = &priv->netdev->dev;
+	struct net_device *netdev = priv->netdev;
 	int i;
 
 	/* NOTE: reset clears all registers */
@@ -146,7 +146,7 @@ static int ftmac100_reset(struct ftmac100 *priv)
 		msleep(10);
 	}
 
-	dev_err(dev, "software reset failed\n");
+	netdev_err(netdev, "software reset failed\n");
 	return -EIO;
 }
 
@@ -332,12 +332,11 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 		struct ftmac100_rxdes *rxdes)
 {
 	struct net_device *netdev = priv->netdev;
-	struct device *dev = &netdev->dev;
 	int error = 0;
 
 	if (unlikely(ftmac100_rxdes_rx_error(rxdes))) {
 		if (printk_ratelimit())
-			dev_info(dev, "rx err\n");
+			netdev_info(netdev, "rx err\n");
 
 		netdev->stats.rx_errors++;
 		error = 1;
@@ -345,7 +344,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 
 	if (unlikely(ftmac100_rxdes_crc_error(rxdes))) {
 		if (printk_ratelimit())
-			dev_info(dev, "rx crc err\n");
+			netdev_info(netdev, "rx crc err\n");
 
 		netdev->stats.rx_crc_errors++;
 		error = 1;
@@ -353,7 +352,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 
 	if (unlikely(ftmac100_rxdes_frame_too_long(rxdes))) {
 		if (printk_ratelimit())
-			dev_info(dev, "rx frame too long\n");
+			netdev_info(netdev, "rx frame too long\n");
 
 		netdev->stats.rx_length_errors++;
 		error = 1;
@@ -361,7 +360,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 
 	if (unlikely(ftmac100_rxdes_runt(rxdes))) {
 		if (printk_ratelimit())
-			dev_info(dev, "rx runt\n");
+			netdev_info(netdev, "rx runt\n");
 
 		netdev->stats.rx_length_errors++;
 		error = 1;
@@ -369,7 +368,7 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 
 	if (unlikely(ftmac100_rxdes_odd_nibble(rxdes))) {
 		if (printk_ratelimit())
-			dev_info(dev, "rx odd nibble\n");
+			netdev_info(netdev, "rx odd nibble\n");
 
 		netdev->stats.rx_length_errors++;
 		error = 1;
@@ -381,12 +380,11 @@ static int ftmac100_rx_packet_error(struct ftmac100 *priv,
 static void ftmac100_rx_drop_packet(struct ftmac100 *priv)
 {
 	struct net_device *netdev = priv->netdev;
-	struct device *dev = &netdev->dev;
 	struct ftmac100_rxdes *rxdes = ftmac100_current_rxdes(priv);
 	int done = 0;
 
 	if (printk_ratelimit())
-		dev_dbg(dev, "drop packet %p\n", rxdes);
+		netdev_dbg(netdev, "drop packet %p\n", rxdes);
 
 	do {
 		if (ftmac100_rxdes_last_segment(rxdes))
@@ -403,7 +401,6 @@ static void ftmac100_rx_drop_packet(struct ftmac100 *priv)
 static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 {
 	struct net_device *netdev = priv->netdev;
-	struct device *dev = &netdev->dev;
 	struct ftmac100_rxdes *rxdes;
 	struct sk_buff *skb;
 	int length;
@@ -426,7 +423,7 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	skb = dev_alloc_skb(length + NET_IP_ALIGN);
 	if (unlikely(!skb)) {
 		if (printk_ratelimit())
-			dev_err(dev, "rx skb alloc failed\n");
+			netdev_err(netdev, "rx skb alloc failed\n");
 
 		ftmac100_rx_drop_packet(priv);
 		return 1;
@@ -649,7 +646,6 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 		dma_addr_t map)
 {
 	struct net_device *netdev = priv->netdev;
-	struct device *dev = &netdev->dev;
 	struct ftmac100_txdes *txdes;
 	unsigned int len = (skb->len < ETH_ZLEN) ? ETH_ZLEN : skb->len;
 	unsigned long flags;
@@ -671,7 +667,7 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 	priv->tx_pending++;
 	if (priv->tx_pending == TX_QUEUE_ENTRIES) {
 		if (printk_ratelimit())
-			dev_info(dev, "tx queue full\n");
+			netdev_info(netdev, "tx queue full\n");
 
 		netif_stop_queue(netdev);
 	}
@@ -791,7 +787,6 @@ err:
 static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
-	struct device *dev = &netdev->dev;
 	int phycr;
 	int i;
 
@@ -809,7 +804,7 @@ static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 		msleep(1);
 	}
 
-	dev_err(dev, "mdio read timed out\n");
+	netdev_err(netdev, "mdio read timed out\n");
 	return 0xffff;
 }
 
@@ -817,7 +812,6 @@ static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
 		int reg, int data)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
-	struct device *dev = &netdev->dev;
 	int phycr;
 	int i;
 
@@ -839,7 +833,7 @@ static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
 		msleep(1);
 	}
 
-	dev_err(dev, "mdio write timed out\n");
+	netdev_err(netdev, "mdio write timed out\n");
 }
 
 /******************************************************************************
@@ -893,7 +887,6 @@ static struct ethtool_ops ftmac100_ethtool_ops = {
 static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 {
 	struct net_device *netdev = dev_id;
-	struct device *dev = &netdev->dev;
 	struct ftmac100 *priv = netdev_priv(netdev);
 	unsigned int status;
 	unsigned int imr;
@@ -920,7 +913,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 	if (status & FTMAC100_INT_NORXBUF) {
 		/* RX buffer unavailable */
 		if (printk_ratelimit())
-			dev_info(dev, "INT_NORXBUF\n");
+			netdev_info(netdev, "INT_NORXBUF\n");
 
 		netdev->stats.rx_over_errors++;
 	}
@@ -940,7 +933,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 	if (status & FTMAC100_INT_RPKT_LOST) {
 		/* received packet lost due to RX FIFO full */
 		if (printk_ratelimit())
-			dev_info(dev, "INT_RPKT_LOST\n");
+			netdev_info(netdev, "INT_RPKT_LOST\n");
 
 		netdev->stats.rx_fifo_errors++;
 	}
@@ -948,7 +941,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 	if (status & FTMAC100_INT_AHB_ERR) {
 		/* AHB error */
 		if (printk_ratelimit())
-			dev_info(dev, "INT_AHB_ERR\n");
+			netdev_info(netdev, "INT_AHB_ERR\n");
 
 		/* do nothing */
 	}
@@ -956,7 +949,7 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 	if (status & FTMAC100_INT_PHYSTS_CHG) {
 		/* PHY link status change */
 		if (printk_ratelimit())
-			dev_info(dev, "INT_PHYSTS_CHG\n");
+			netdev_info(netdev, "INT_PHYSTS_CHG\n");
 
 		mii_check_link(&priv->mii);
 	}
@@ -991,20 +984,19 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
  *****************************************************************************/
 static int ftmac100_open(struct net_device *netdev)
 {
-	struct device *dev = &netdev->dev;
 	struct ftmac100 *priv = netdev_priv(netdev);
 	int err;
 
 	err = ftmac100_alloc_buffers(priv);
 	if (err) {
-		dev_err(dev, "failed to allocate buffers\n");
+		netdev_err(netdev, "failed to allocate buffers\n");
 		goto err_alloc;
 	}
 
 	err = request_irq(priv->irq, ftmac100_interrupt, IRQF_SHARED,
 		netdev->name, netdev);
 	if (err) {
-		dev_err(dev, "failed to request irq %d\n", priv->irq);
+		netdev_err(netdev, "failed to request irq %d\n", priv->irq);
 		goto err_irq;
 	}
 
@@ -1049,13 +1041,12 @@ static int ftmac100_stop(struct net_device *netdev)
 static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 		struct net_device *netdev)
 {
-	struct device *dev = &netdev->dev;
 	struct ftmac100 *priv = netdev_priv(netdev);
 	dma_addr_t map;
 
 	if (unlikely(skb->len > MAX_PKT_SIZE)) {
 		if (printk_ratelimit())
-			dev_dbg(dev, "tx packet too big\n");
+			netdev_dbg(netdev, "tx packet too big\n");
 
 		netdev->stats.tx_dropped++;
 		dev_kfree_skb(skb);
@@ -1067,7 +1058,7 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 	if (unlikely(dma_mapping_error(priv->dev, map))) {
 		/* drop packet */
 		if (printk_ratelimit())
-			dev_err(dev, "map socket buffer failed\n");
+			netdev_err(netdev, "map socket buffer failed\n");
 
 		netdev->stats.tx_dropped++;
 		dev_kfree_skb(skb);
@@ -1180,11 +1171,11 @@ static int ftmac100_probe(struct platform_device *pdev)
 		goto err_register_netdev;
 	}
 
-	dev_info(&netdev->dev, "irq %d, mapped at %p\n", priv->irq, priv->base);
+	netdev_info(netdev, "irq %d, mapped at %p\n", priv->irq, priv->base);
 
 	if (is_zero_ether_addr(netdev->dev_addr)) {
 		random_ether_addr(netdev->dev_addr);
-		dev_info(&netdev->dev, "generated random MAC address "
+		netdev_info(netdev, "generated random MAC address "
 			"%.2x:%.2x:%.2x:%.2x:%.2x:%.2x.\n",
 			netdev->dev_addr[0], netdev->dev_addr[1],
 			netdev->dev_addr[2], netdev->dev_addr[3],
