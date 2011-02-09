@@ -783,7 +783,7 @@ static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 	}
 
 	netdev_err(netdev, "mdio read timed out\n");
-	return 0xffff;
+	return 0;
 }
 
 static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
