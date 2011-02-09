@@ -607,7 +607,9 @@ static bool ftmac100_tx_complete_packet(struct ftmac100 *priv)
 
 	ftmac100_tx_clean_pointer_advance(priv);
 
+	spin_lock(&priv->tx_lock);
 	priv->tx_pending--;
+	spin_unlock(&priv->tx_lock);
 	netif_wake_queue(netdev);
 
 	return true;
@@ -615,10 +617,8 @@ static bool ftmac100_tx_complete_packet(struct ftmac100 *priv)
 
 static void ftmac100_tx_complete(struct ftmac100 *priv)
 {
-	spin_lock(&priv->tx_lock);
 	while (ftmac100_tx_complete_packet(priv))
 		;
-	spin_unlock(&priv->tx_lock);
 }
 
 static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
@@ -632,7 +632,6 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 	ftmac100_tx_pointer_advance(priv);
 
 	/* setup TX descriptor */
-	spin_lock(&priv->tx_lock);
 	ftmac100_txdes_set_skb(txdes, skb);
 	ftmac100_txdes_set_dma_addr(txdes, map);
 
@@ -641,6 +640,7 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 	ftmac100_txdes_set_txint(txdes);
 	ftmac100_txdes_set_buffer_size(txdes, len);
 
+	spin_lock(&priv->tx_lock);
 	priv->tx_pending++;
 	if (priv->tx_pending == TX_QUEUE_ENTRIES)
 		netif_stop_queue(netdev);
