@@ -898,14 +898,6 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 			completed = false;
 	}
 
-	if (status & FTMAC100_INT_NORXBUF) {
-		/* RX buffer unavailable */
-		if (net_ratelimit())
-			netdev_info(netdev, "INT_NORXBUF\n");
-
-		netdev->stats.rx_over_errors++;
-	}
-
 	if (status & (FTMAC100_INT_XPKT_OK | FTMAC100_INT_XPKT_LOST)) {
 		/*
 		 * FTMAC100_INT_XPKT_OK:
@@ -918,28 +910,29 @@ static int ftmac100_poll(struct napi_struct *napi, int budget)
 		ftmac100_tx_complete(priv);
 	}
 
-	if (status & FTMAC100_INT_RPKT_LOST) {
-		/* received packet lost due to RX FIFO full */
+	if (status & (FTMAC100_INT_NORXBUF | FTMAC100_INT_RPKT_LOST |
+		      FTMAC100_INT_AHB_ERR | FTMAC100_INT_PHYSTS_CHG)) {
 		if (net_ratelimit())
-			netdev_info(netdev, "INT_RPKT_LOST\n");
+			netdev_info(netdev, "[ISR] = 0x%x: %s%s%s%s\n", status,
+				    status & FTMAC100_INT_NORXBUF ? "NORXBUF " : "",
+				    status & FTMAC100_INT_RPKT_LOST ? "RPKT_LOST " : "",
+				    status & FTMAC100_INT_AHB_ERR ? "AHB_ERR " : "",
+				    status & FTMAC100_INT_PHYSTS_CHG ? "PHYSTS_CHG" : "");
 
-		netdev->stats.rx_fifo_errors++;
-	}
+		if (status & FTMAC100_INT_NORXBUF) {
+			/* RX buffer unavailable */
+			netdev->stats.rx_over_errors++;
+		}
 
-	if (status & FTMAC100_INT_AHB_ERR) {
-		/* AHB error */
-		if (net_ratelimit())
-			netdev_info(netdev, "INT_AHB_ERR\n");
+		if (status & FTMAC100_INT_RPKT_LOST) {
+			/* received packet lost due to RX FIFO full */
+			netdev->stats.rx_fifo_errors++;
+		}
 
-		/* do nothing */
-	}
-
-	if (status & FTMAC100_INT_PHYSTS_CHG) {
-		/* PHY link status change */
-		if (net_ratelimit())
-			netdev_info(netdev, "INT_PHYSTS_CHG\n");
-
-		mii_check_link(&priv->mii);
+		if (status & FTMAC100_INT_PHYSTS_CHG) {
+			/* PHY link status change */
+			mii_check_link(&priv->mii);
+		}
 	}
 
 	if (completed) {
