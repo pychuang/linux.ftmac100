@@ -1066,11 +1066,6 @@ static int ftmac100_hard_start_xmit(struct sk_buff *skb,
 	return ftmac100_xmit(priv, skb, map);
 }
 
-static struct net_device_stats *ftmac100_get_stats(struct net_device *netdev)
-{
-	return &netdev->stats;
-}
-
 /* optional */
 static int ftmac100_do_ioctl(struct net_device *netdev, struct ifreq *ifr,
 		int cmd)
@@ -1087,7 +1082,6 @@ static struct net_device_ops ftmac100_netdev_ops = {
 	.ndo_start_xmit		= ftmac100_hard_start_xmit,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_get_stats		= ftmac100_get_stats,
 	.ndo_do_ioctl		= ftmac100_do_ioctl,
 };
 
