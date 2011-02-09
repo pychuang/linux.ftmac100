@@ -1105,7 +1105,7 @@ static int ftmac100_probe(struct platform_device *pdev)
 	netif_napi_add(netdev, &priv->napi, ftmac100_poll, 64);
 
 	/* map io memory */
-	priv->res = request_mem_region(res->start, res->end - res->start,
+	priv->res = request_mem_region(res->start, resource_size(res),
 				       dev_name(&pdev->dev));
 	if (!priv->res) {
 		dev_err(&pdev->dev, "Could not reserve memory region\n");
