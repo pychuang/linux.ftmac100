@@ -191,84 +191,87 @@ static void ftmac100_stop_hw(struct ftmac100 *priv)
  *****************************************************************************/
 static bool ftmac100_rxdes_first_segment(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_FRS;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_FRS);
 }
 
 static bool ftmac100_rxdes_last_segment(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_LRS;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_LRS);
 }
 
 static bool ftmac100_rxdes_owned_by_dma(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_RXDMA_OWN;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_RXDMA_OWN);
 }
 
 static void ftmac100_rxdes_set_dma_own(struct ftmac100_rxdes *rxdes)
 {
 	/* clear status bits */
-	rxdes->rxdes0 = FTMAC100_RXDES0_RXDMA_OWN;
+	rxdes->rxdes0 = cpu_to_le32(FTMAC100_RXDES0_RXDMA_OWN);
 }
 
 static bool ftmac100_rxdes_rx_error(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_RX_ERR;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_RX_ERR);
 }
 
 static bool ftmac100_rxdes_crc_error(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_CRC_ERR;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_CRC_ERR);
 }
 
 static bool ftmac100_rxdes_frame_too_long(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_FTL;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_FTL);
 }
 
 static bool ftmac100_rxdes_runt(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_RUNT;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_RUNT);
 }
 
 static bool ftmac100_rxdes_odd_nibble(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_RX_ODD_NB;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_RX_ODD_NB);
 }
 
 static unsigned int ftmac100_rxdes_frame_length(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_RFL;
+	return le32_to_cpu(rxdes->rxdes0) & FTMAC100_RXDES0_RFL;
 }
 
 static bool ftmac100_rxdes_multicast(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes0 & FTMAC100_RXDES0_MULTICAST;
+	return rxdes->rxdes0 & cpu_to_le32(FTMAC100_RXDES0_MULTICAST);
 }
 
 static void ftmac100_rxdes_set_buffer_size(struct ftmac100_rxdes *rxdes,
 		unsigned int size)
 {
-	rxdes->rxdes1 = (rxdes->rxdes1 & FTMAC100_RXDES1_EDORR) |
-			 FTMAC100_RXDES1_RXBUF_SIZE(size);
+	rxdes->rxdes1 &= cpu_to_le32(FTMAC100_RXDES1_EDORR);
+	rxdes->rxdes1 |= cpu_to_le32(FTMAC100_RXDES1_RXBUF_SIZE(size));
 }
 
 static void ftmac100_rxdes_set_end_of_ring(struct ftmac100_rxdes *rxdes)
 {
-	rxdes->rxdes1 |= FTMAC100_RXDES1_EDORR;
+	rxdes->rxdes1 |= cpu_to_le32(FTMAC100_RXDES1_EDORR);
 }
 
 static void ftmac100_rxdes_set_dma_addr(struct ftmac100_rxdes *rxdes,
 		dma_addr_t addr)
 {
-	rxdes->rxdes2 = addr;
+	rxdes->rxdes2 = cpu_to_le32(addr);
 }
 
 static dma_addr_t ftmac100_rxdes_get_dma_addr(struct ftmac100_rxdes *rxdes)
 {
-	return rxdes->rxdes2;
+	return le32_to_cpu(rxdes->rxdes2);
 }
 
-/* rxdes3 is not used by hardware, we use it to keep track of buffer */
+/*
+ * rxdes3 is not used by hardware. We use it to keep track of buffer.
+ * Since hardware does not touch it, we can skip cpu_to_le32()/le32_to_cpu().
+ */
 static void ftmac100_rxdes_set_va(struct ftmac100_rxdes *rxdes, void *addr)
 {
 	rxdes->rxdes3 = (unsigned int)addr;
@@ -459,14 +462,14 @@ static void ftmac100_txdes_reset(struct ftmac100_txdes *txdes)
 {
 	/* clear all except end of ring bit */
 	txdes->txdes0 = 0;
-	txdes->txdes1 &= FTMAC100_TXDES1_EDOTR;
+	txdes->txdes1 &= cpu_to_le32(FTMAC100_TXDES1_EDOTR);
 	txdes->txdes2 = 0;
 	txdes->txdes3 = 0;
 }
 
 static bool ftmac100_txdes_owned_by_dma(struct ftmac100_txdes *txdes)
 {
-	return txdes->txdes0 & FTMAC100_TXDES0_TXDMA_OWN;
+	return txdes->txdes0 & cpu_to_le32(FTMAC100_TXDES0_TXDMA_OWN);
 }
 
 static void ftmac100_txdes_set_dma_own(struct ftmac100_txdes *txdes)
@@ -476,57 +479,60 @@ static void ftmac100_txdes_set_dma_own(struct ftmac100_txdes *txdes)
 	 * descriptor fields.
 	 */
 	wmb();
-	txdes->txdes0 |= FTMAC100_TXDES0_TXDMA_OWN;
+	txdes->txdes0 |= cpu_to_le32(FTMAC100_TXDES0_TXDMA_OWN);
 }
 
 static bool ftmac100_txdes_excessive_collision(struct ftmac100_txdes *txdes)
 {
-	return txdes->txdes0 & FTMAC100_TXDES0_TXPKT_EXSCOL;
+	return txdes->txdes0 & cpu_to_le32(FTMAC100_TXDES0_TXPKT_EXSCOL);
 }
 
 static bool ftmac100_txdes_late_collision(struct ftmac100_txdes *txdes)
 {
-	return txdes->txdes0 & FTMAC100_TXDES0_TXPKT_LATECOL;
+	return txdes->txdes0 & cpu_to_le32(FTMAC100_TXDES0_TXPKT_LATECOL);
 }
 
 static void ftmac100_txdes_set_end_of_ring(struct ftmac100_txdes *txdes)
 {
-	txdes->txdes1 |= FTMAC100_TXDES1_EDOTR;
+	txdes->txdes1 |= cpu_to_le32(FTMAC100_TXDES1_EDOTR);
 }
 
 static void ftmac100_txdes_set_first_segment(struct ftmac100_txdes *txdes)
 {
-	txdes->txdes1 |= FTMAC100_TXDES1_FTS;
+	txdes->txdes1 |= cpu_to_le32(FTMAC100_TXDES1_FTS);
 }
 
 static void ftmac100_txdes_set_last_segment(struct ftmac100_txdes *txdes)
 {
-	txdes->txdes1 |= FTMAC100_TXDES1_LTS;
+	txdes->txdes1 |= cpu_to_le32(FTMAC100_TXDES1_LTS);
 }
 
 static void ftmac100_txdes_set_txint(struct ftmac100_txdes *txdes)
 {
-	txdes->txdes1 |= FTMAC100_TXDES1_TXIC;
+	txdes->txdes1 |= cpu_to_le32(FTMAC100_TXDES1_TXIC);
 }
 
 static void ftmac100_txdes_set_buffer_size(struct ftmac100_txdes *txdes,
 		unsigned int len)
 {
-	txdes->txdes1 |= FTMAC100_TXDES1_TXBUF_SIZE(len);
+	txdes->txdes1 |= cpu_to_le32(FTMAC100_TXDES1_TXBUF_SIZE(len));
 }
 
 static void ftmac100_txdes_set_dma_addr(struct ftmac100_txdes *txdes,
 		dma_addr_t addr)
 {
-	txdes->txdes2 = addr;
+	txdes->txdes2 = cpu_to_le32(addr);
 }
 
 static dma_addr_t ftmac100_txdes_get_dma_addr(struct ftmac100_txdes *txdes)
 {
-	return txdes->txdes2;
+	return le32_to_cpu(txdes->txdes2);
 }
 
-/* txdes3 is not used by hardware, we use it to keep track of socket buffer */
+/*
+ * txdes3 is not used by hardware. We use it to keep track of socket buffer.
+ * Since hardware does not touch it, we can skip cpu_to_le32()/le32_to_cpu().
+ */
 static void ftmac100_txdes_set_skb(struct ftmac100_txdes *txdes,
 		struct sk_buff *skb)
 {
