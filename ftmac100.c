@@ -871,7 +871,7 @@ static u32 ftmac100_get_link(struct net_device *netdev)
 	return mii_link_ok(&priv->mii);
 }
 
-static struct ethtool_ops ftmac100_ethtool_ops = {
+static const struct ethtool_ops ftmac100_ethtool_ops = {
 	.set_settings		= ftmac100_set_settings,
 	.get_settings		= ftmac100_get_settings,
 	.get_drvinfo		= ftmac100_get_drvinfo,
@@ -1076,7 +1076,7 @@ static int ftmac100_do_ioctl(struct net_device *netdev, struct ifreq *ifr,
 	return generic_mii_ioctl(&priv->mii, data, cmd, NULL);
 }
 
-static struct net_device_ops ftmac100_netdev_ops = {
+static const struct net_device_ops ftmac100_netdev_ops = {
 	.ndo_open		= ftmac100_open,
 	.ndo_stop		= ftmac100_stop,
 	.ndo_start_xmit		= ftmac100_hard_start_xmit,
