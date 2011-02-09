@@ -65,7 +65,6 @@ struct ftmac100 {
 	unsigned int tx_pointer;
 	unsigned int tx_pending;
 
-	spinlock_t hw_lock;
 	spinlock_t tx_lock;
 
 	struct net_device *netdev;
@@ -92,29 +91,17 @@ struct ftmac100 {
 
 static inline void ftmac100_disable_rxint(struct ftmac100 *priv)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(INT_MASK_RX_DISABLED, priv->base + FTMAC100_OFFSET_IMR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 static inline void ftmac100_enable_all_int(struct ftmac100 *priv)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(INT_MASK_ALL_ENABLED, priv->base + FTMAC100_OFFSET_IMR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 static inline void ftmac100_disable_all_int(struct ftmac100 *priv)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(INT_MASK_ALL_DISABLED, priv->base + FTMAC100_OFFSET_IMR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 static inline void ftmac100_set_receive_ring_base(struct ftmac100 *priv,
@@ -137,21 +124,15 @@ static inline void ftmac100_txdma_start_polling(struct ftmac100 *priv)
 static int ftmac100_reset(struct ftmac100 *priv)
 {
 	struct device *dev = &priv->netdev->dev;
-	unsigned long flags;
 	int i;
 
 	/* NOTE: reset clears all registers */
-
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(FTMAC100_MACCR_SW_RST, priv->base + FTMAC100_OFFSET_MACCR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	for (i = 0; i < 5; i++) {
 		int maccr;
 
-		spin_lock_irqsave(&priv->hw_lock, flags);
 		maccr = ioread32(priv->base + FTMAC100_OFFSET_MACCR);
-		spin_unlock_irqrestore(&priv->hw_lock, flags);
 		if (!(maccr & FTMAC100_MACCR_SW_RST)) {
 			/*
 			 * FTMAC100_MACCR_SW_RST cleared does not indicate
@@ -181,15 +162,12 @@ static void ftmac100_set_mac(struct ftmac100 *priv, const unsigned char *mac)
 static int ftmac100_start_hw(struct ftmac100 *priv)
 {
 	struct net_device *netdev = priv->netdev;
-	unsigned long flags;
 	int maccr;
 
 	if (ftmac100_reset(priv))
 		return -EIO;
 
 	/* setup ring buffer base registers */
-
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	ftmac100_set_receive_ring_base(priv,
 		priv->descs_dma_addr + offsetof(struct ftmac100_descs, rxdes));
 	ftmac100_set_transmit_ring_base(priv,
@@ -210,18 +188,12 @@ static int ftmac100_start_hw(struct ftmac100 *priv)
 		FTMAC100_MACCR_RX_BROADPKT;
 
 	iowrite32(maccr, priv->base + FTMAC100_OFFSET_MACCR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
-
 	return 0;
 }
 
 static void ftmac100_stop_hw(struct ftmac100 *priv)
 {
-	unsigned long flags;
-
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(0, priv->base + FTMAC100_OFFSET_MACCR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 }
 
 /******************************************************************************
@@ -710,10 +682,7 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 	ftmac100_txdes_set_dma_own(txdes);
 	spin_unlock_irqrestore(&priv->tx_lock, flags);
 
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	ftmac100_txdma_start_polling(priv);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
-
 	return NETDEV_TX_OK;
 }
 
@@ -823,7 +792,6 @@ static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	struct device *dev = &netdev->dev;
-	unsigned long flags;
 	int phycr;
 	int i;
 
@@ -831,10 +799,7 @@ static int ftmac100_mdio_read(struct net_device *netdev, int phy_id, int reg)
 		FTMAC100_PHYCR_REGAD(reg) |
 		FTMAC100_PHYCR_MIIRD;
 
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(phycr, priv->base + FTMAC100_OFFSET_PHYCR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
-
 	for (i = 0; i < 10; i++) {
 		phycr = ioread32(priv->base + FTMAC100_OFFSET_PHYCR);
 
@@ -853,7 +818,6 @@ static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
 {
 	struct ftmac100 *priv = netdev_priv(netdev);
 	struct device *dev = &netdev->dev;
-	unsigned long flags;
 	int phycr;
 	int i;
 
@@ -863,10 +827,8 @@ static void ftmac100_mdio_write(struct net_device *netdev, int phy_id,
 
 	data = FTMAC100_PHYWDATA_MIIWDATA(data);
 
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	iowrite32(data, priv->base + FTMAC100_OFFSET_PHYWDATA);
 	iowrite32(phycr, priv->base + FTMAC100_OFFSET_PHYCR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	for (i = 0; i < 10; i++) {
 		phycr = ioread32(priv->base + FTMAC100_OFFSET_PHYCR);
@@ -933,14 +895,11 @@ static irqreturn_t ftmac100_interrupt(int irq, void *dev_id)
 	struct net_device *netdev = dev_id;
 	struct device *dev = &netdev->dev;
 	struct ftmac100 *priv = netdev_priv(netdev);
-	unsigned long flags;
 	unsigned int status;
 	unsigned int imr;
 
-	spin_lock_irqsave(&priv->hw_lock, flags);
 	status = ioread32(priv->base + FTMAC100_OFFSET_ISR);
 	imr = ioread32(priv->base + FTMAC100_OFFSET_IMR);
-	spin_unlock_irqrestore(&priv->hw_lock, flags);
 
 	status &= imr;
 	if (status & (FTMAC100_INT_RPKT_FINISH | FTMAC100_INT_NORXBUF)) {
@@ -1183,7 +1142,6 @@ static int ftmac100_probe(struct platform_device *pdev)
 	priv->netdev = netdev;
 	priv->dev = &pdev->dev;
 
-	spin_lock_init(&priv->hw_lock);
 	spin_lock_init(&priv->tx_lock);
 
 	/* initialize NAPI */
