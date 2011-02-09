@@ -420,7 +420,7 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 
 	length = ftmac100_rxdes_frame_length(rxdes);
 
-	skb = dev_alloc_skb(length + NET_IP_ALIGN);
+	skb = netdev_alloc_skb_ip_align(netdev, length);
 	if (unlikely(!skb)) {
 		if (printk_ratelimit())
 			netdev_err(netdev, "rx skb alloc failed\n");
@@ -431,8 +431,6 @@ static int ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 
 	if (unlikely(ftmac100_rxdes_multicast(rxdes)))
 		netdev->stats.multicast++;
-
-	skb_reserve(skb, NET_IP_ALIGN);
 
 	do {
 		dma_addr_t map = ftmac100_rxdes_get_dma_addr(rxdes);
