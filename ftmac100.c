@@ -42,6 +42,14 @@
 #define MAX_PKT_SIZE		1518
 #define RX_BUF_SIZE		2044	/* must be smaller than 0x7ff */
 
+#if MAX_PKT_SIZE > 0x7ff
+#error invalid MAX_PKT_SIZE
+#endif
+
+#if RX_BUF_SIZE > 0x7ff || RX_BUF_SIZE > PAGE_SIZE
+#error invalid RX_BUF_SIZE
+#endif
+
 /******************************************************************************
  * private data
  *****************************************************************************/
