@@ -80,6 +80,8 @@ struct ftmac100 {
 	struct mii_if_info mii;
 };
 
+static int ftmac100_alloc_rx_page(struct ftmac100 *priv, struct ftmac100_rxdes *rxdes);
+
 /******************************************************************************
  * internal functions (hardware register access)
  *****************************************************************************/
@@ -276,17 +278,17 @@ static dma_addr_t ftmac100_rxdes_get_dma_addr(struct ftmac100_rxdes *rxdes)
 }
 
 /*
- * rxdes3 is not used by hardware. We use it to keep track of buffer.
+ * rxdes3 is not used by hardware. We use it to keep track of page.
  * Since hardware does not touch it, we can skip cpu_to_le32()/le32_to_cpu().
  */
-static void ftmac100_rxdes_set_va(struct ftmac100_rxdes *rxdes, void *addr)
+static void ftmac100_rxdes_set_page(struct ftmac100_rxdes *rxdes, struct page *page)
 {
-	rxdes->rxdes3 = (unsigned int)addr;
+	rxdes->rxdes3 = (unsigned int)page;
 }
 
-static void *ftmac100_rxdes_get_va(struct ftmac100_rxdes *rxdes)
+static struct page *ftmac100_rxdes_get_page(struct ftmac100_rxdes *rxdes)
 {
-	return (void *)rxdes->rxdes3;
+	return (struct page *)rxdes->rxdes3;
 }
 
 /******************************************************************************
@@ -395,9 +397,9 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	struct net_device *netdev = priv->netdev;
 	struct ftmac100_rxdes *rxdes;
 	struct sk_buff *skb;
-	int length;
+	struct page *page;
 	dma_addr_t map;
-	void *buf;
+	int length;
 
 	rxdes = ftmac100_rx_locate_first_segment(priv);
 	if (!rxdes)
@@ -416,9 +418,7 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 		BUG();
 
 	/* start processing */
-	length = ftmac100_rxdes_frame_length(rxdes);
-
-	skb = netdev_alloc_skb_ip_align(netdev, length);
+	skb = netdev_alloc_skb_ip_align(netdev, 128);
 	if (unlikely(!skb)) {
 		if (net_ratelimit())
 			netdev_err(netdev, "rx skb alloc failed\n");
@@ -431,13 +431,18 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 		netdev->stats.multicast++;
 
 	map = ftmac100_rxdes_get_dma_addr(rxdes);
-	buf = ftmac100_rxdes_get_va(rxdes);
+	dma_unmap_page(priv->dev, map, RX_BUF_SIZE, DMA_FROM_DEVICE);
 
-	dma_sync_single_for_cpu(priv->dev, map, RX_BUF_SIZE, DMA_FROM_DEVICE);
-	memcpy(skb_put(skb, length), buf, length);
-	dma_sync_single_for_device(priv->dev, map, RX_BUF_SIZE, DMA_FROM_DEVICE);
+	length = ftmac100_rxdes_frame_length(rxdes);
+	page = ftmac100_rxdes_get_page(rxdes);
+	skb_fill_page_desc(skb, 0, page, 0, length);
+	skb->len += length;
+	skb->data_len += length;
+	skb->truesize += length;
+	__pskb_pull_tail(skb, min(length, 64));
 
-	ftmac100_rxdes_set_dma_own(rxdes);
+	ftmac100_alloc_rx_page(priv, rxdes);
+
 	ftmac100_rx_pointer_advance(priv);
 
 	skb->protocol = eth_type_trans(skb, netdev);
@@ -599,7 +604,6 @@ static bool ftmac100_tx_complete_packet(struct ftmac100 *priv)
 	}
 
 	dma_unmap_single(priv->dev, map, skb_headlen(skb), DMA_TO_DEVICE);
-
 	dev_kfree_skb(skb);
 
 	ftmac100_txdes_reset(txdes);
@@ -655,35 +659,60 @@ static int ftmac100_xmit(struct ftmac100 *priv, struct sk_buff *skb,
 /******************************************************************************
  * internal functions (buffer)
  *****************************************************************************/
+static int ftmac100_alloc_rx_page(struct ftmac100 *priv, struct ftmac100_rxdes *rxdes)
+{
+	struct net_device *netdev = priv->netdev;
+	struct page *page;
+	dma_addr_t map;
+
+	page = alloc_page(GFP_KERNEL);
+	if (!page) {
+		if (net_ratelimit())
+			netdev_err(netdev, "failed to allocate rx page\n");
+		return -ENOMEM;
+	}
+
+	map = dma_map_page(priv->dev, page, 0, RX_BUF_SIZE, DMA_FROM_DEVICE);
+	if (unlikely(dma_mapping_error(priv->dev, map))) {
+		if (net_ratelimit())
+			netdev_err(netdev, "failed to map rx page\n");
+		__free_page(page);
+		return -ENOMEM;
+	}
+
+	ftmac100_rxdes_set_page(rxdes, page);
+	ftmac100_rxdes_set_dma_addr(rxdes, map);
+	ftmac100_rxdes_set_buffer_size(rxdes, RX_BUF_SIZE);
+	ftmac100_rxdes_set_dma_own(rxdes);
+	return 0;
+}
+
 static void ftmac100_free_buffers(struct ftmac100 *priv)
 {
 	int i;
 
-	for (i = 0; i < RX_QUEUE_ENTRIES; i += 2) {
+	for (i = 0; i < RX_QUEUE_ENTRIES; i++) {
 		struct ftmac100_rxdes *rxdes = &priv->descs->rxdes[i];
+		struct page *page = ftmac100_rxdes_get_page(rxdes);
 		dma_addr_t map = ftmac100_rxdes_get_dma_addr(rxdes);
-		void *page = ftmac100_rxdes_get_va(rxdes);
 
-		if (map)
-			dma_unmap_single(priv->dev, map, PAGE_SIZE,
-					 DMA_FROM_DEVICE);
+		if (!page)
+			continue;
 
-		if (page)
-			free_page((unsigned long)page);
+		dma_unmap_page(priv->dev, map, RX_BUF_SIZE, DMA_FROM_DEVICE);
+		__free_page(page);
 	}
 
 	for (i = 0; i < TX_QUEUE_ENTRIES; i++) {
 		struct ftmac100_txdes *txdes = &priv->descs->txdes[i];
 		struct sk_buff *skb = ftmac100_txdes_get_skb(txdes);
+		dma_addr_t map = ftmac100_txdes_get_dma_addr(txdes);
 
-		if (skb) {
-			dma_addr_t map;
+		if (!skb)
+			continue;
 
-			map = ftmac100_txdes_get_dma_addr(txdes);
-			dma_unmap_single(priv->dev, map, skb_headlen(skb),
-					 DMA_TO_DEVICE);
-			dev_kfree_skb(skb);
-		}
+		dma_unmap_single(priv->dev, map, skb_headlen(skb), DMA_TO_DEVICE);
+		dev_kfree_skb(skb);
 	}
 
 	dma_free_coherent(priv->dev, sizeof(struct ftmac100_descs),
@@ -704,40 +733,14 @@ static int ftmac100_alloc_buffers(struct ftmac100 *priv)
 	/* initialize RX ring */
 	ftmac100_rxdes_set_end_of_ring(&priv->descs->rxdes[RX_QUEUE_ENTRIES - 1]);
 
-	for (i = 0; i < RX_QUEUE_ENTRIES; i += 2) {
+	for (i = 0; i < RX_QUEUE_ENTRIES; i++) {
 		struct ftmac100_rxdes *rxdes = &priv->descs->rxdes[i];
-		void *page;
-		dma_addr_t map;
 
-		page = (void *)__get_free_page(GFP_KERNEL);
-		if (!page)
+		if (ftmac100_alloc_rx_page(priv, rxdes))
 			goto err;
-
-		map = dma_map_single(priv->dev, page, PAGE_SIZE, DMA_FROM_DEVICE);
-		if (unlikely(dma_mapping_error(priv->dev, map))) {
-			free_page((unsigned long)page);
-			goto err;
-		}
-
-		/*
-		 * The hardware enforces a sub-2K maximum packet size, so we
-		 * put two buffers on every hardware page.
-		 */
-		ftmac100_rxdes_set_va(rxdes, page);
-		ftmac100_rxdes_set_va(rxdes + 1, page + PAGE_SIZE / 2);
-
-		ftmac100_rxdes_set_dma_addr(rxdes, map);
-		ftmac100_rxdes_set_dma_addr(rxdes + 1, map + PAGE_SIZE / 2);
-
-		ftmac100_rxdes_set_buffer_size(rxdes, RX_BUF_SIZE);
-		ftmac100_rxdes_set_buffer_size(rxdes + 1, RX_BUF_SIZE);
-
-		ftmac100_rxdes_set_dma_own(rxdes);
-		ftmac100_rxdes_set_dma_own(rxdes + 1);
 	}
 
 	/* initialize TX ring */
-
 	ftmac100_txdes_set_end_of_ring(&priv->descs->txdes[TX_QUEUE_ENTRIES - 1]);
 	return 0;
 
