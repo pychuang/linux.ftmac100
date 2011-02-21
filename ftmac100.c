@@ -396,8 +396,8 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	struct ftmac100_rxdes *rxdes;
 	struct sk_buff *skb;
 	int length;
-	int copied = 0;
-	bool done = false;
+	dma_addr_t map;
+	void *buf;
 
 	rxdes = ftmac100_rx_locate_first_segment(priv);
 	if (!rxdes)
@@ -408,8 +408,14 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 		return true;
 	}
 
-	/* start processing */
+	/*
+	 * It is impossible to get multi-segment packets
+	 * because we always provide big enough receive buffers.
+	 */
+	if (unlikely(!ftmac100_rxdes_last_segment(rxdes)))
+		BUG();
 
+	/* start processing */
 	length = ftmac100_rxdes_frame_length(rxdes);
 
 	skb = netdev_alloc_skb_ip_align(netdev, length);
@@ -424,30 +430,15 @@ static bool ftmac100_rx_packet(struct ftmac100 *priv, int *processed)
 	if (unlikely(ftmac100_rxdes_multicast(rxdes)))
 		netdev->stats.multicast++;
 
-	do {
-		dma_addr_t map = ftmac100_rxdes_get_dma_addr(rxdes);
-		void *buf = ftmac100_rxdes_get_va(rxdes);
-		int size;
+	map = ftmac100_rxdes_get_dma_addr(rxdes);
+	buf = ftmac100_rxdes_get_va(rxdes);
 
-		size = min(length - copied, RX_BUF_SIZE);
+	dma_sync_single_for_cpu(priv->dev, map, RX_BUF_SIZE, DMA_FROM_DEVICE);
+	memcpy(skb_put(skb, length), buf, length);
+	dma_sync_single_for_device(priv->dev, map, RX_BUF_SIZE, DMA_FROM_DEVICE);
 
-		dma_sync_single_for_cpu(priv->dev, map, RX_BUF_SIZE,
-					DMA_FROM_DEVICE);
-		memcpy(skb_put(skb, size), buf, size);
-
-		copied += size;
-
-		if (ftmac100_rxdes_last_segment(rxdes))
-			done = true;
-
-		dma_sync_single_for_device(priv->dev, map, RX_BUF_SIZE,
-					   DMA_FROM_DEVICE);
-
-		ftmac100_rxdes_set_dma_own(rxdes);
-
-		ftmac100_rx_pointer_advance(priv);
-		rxdes = ftmac100_current_rxdes(priv);
-	} while (!done && copied < length);
+	ftmac100_rxdes_set_dma_own(rxdes);
+	ftmac100_rx_pointer_advance(priv);
 
 	skb->protocol = eth_type_trans(skb, netdev);
 
